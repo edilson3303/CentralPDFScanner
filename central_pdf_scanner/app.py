@@ -170,7 +170,7 @@ class CentralApp(tk.Tk):
                 ("JPG para PDF", self.from_images),
                 ("PDF digitalizado para OCR", self.to_ocr),
             ],
-            columns=3,
+            columns=4,
         ).pack(fill="x")
 
         footer = ttk.Frame(self, padding=(20, 0, 20, 18))

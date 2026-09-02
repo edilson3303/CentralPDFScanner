@@ -1,6 +1,6 @@
 # PDF & Scanner
 
-Versão atual: 2.0.1
+Versão atual: 2.0.2
 
 Aplicativo desktop portátil para Windows 10/11, em português, que reúne digitalização WIA ou diretamente por IP, OCR e ferramentas de PDF, Word e imagem. Todo o processamento é local.
 
@@ -26,7 +26,7 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 - Digitalizar várias páginas no mesmo documento
 - Converter PDF digitalizado em PDF pesquisável por OCR
 - Abrir as janelas internas centralizadas na tela
-- Consultar no aplicativo a licença institucional da ALEAP
+- Consultar no aplicativo a licença institucional da ALAP
 
 ## Usar pelo código-fonte
 

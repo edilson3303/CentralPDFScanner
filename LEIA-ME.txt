@@ -1,4 +1,4 @@
-PDF & SCANNER 2.0.1
+PDF & SCANNER 2.0.2
 =================
 
 COMO ABRIR A VERSAO PORTATIL
@@ -56,7 +56,7 @@ NOME E FORMATO DA DIGITALIZACAO
 - A digitalizacao pode ser salva em PDF ou em arquivos JPG por pagina.
 
 LICENCA
-- Use o botao pequeno "Licenca" para ler os termos institucionais da ALEAP.
+- Use o botao pequeno "Licenca" para ler os termos institucionais da ALAP.
 - Uma copia dos termos acompanha o pacote em LICENCA.txt.
 
 PRIVACIDADE
