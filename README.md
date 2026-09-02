@@ -2,6 +2,8 @@
 
 Versão atual: 2.1.0
 
+Esta versão inclui rolagem horizontal na união, divisão por intervalos e proteção independente de abertura e edição.
+
 Aplicativo desktop portátil para Windows 10/11, em português, que reúne digitalização WIA ou diretamente por IP, OCR e ferramentas de PDF, Word e imagem. Todo o processamento é local.
 
 A interface utiliza a identidade visual da Assembleia Legislativa do Estado do Amapá e organiza as ferramentas em Digitalização, Edição de PDF e Conversões.
