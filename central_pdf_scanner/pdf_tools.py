@@ -175,6 +175,50 @@ def images_to_pdf(images: Iterable[str | Path], output_pdf: str | Path) -> Path:
             image.close()
 
 
+def protect_pdf(
+    input_pdf: str | Path,
+    output_pdf: str | Path,
+    password: str,
+) -> Path:
+    """Protege um PDF com criptografia AES-256 e senha de abertura."""
+    if not password:
+        raise PDFToolError("A senha não pode ficar vazia.")
+    if len(password) < 4:
+        raise PDFToolError("Use uma senha com pelo menos 4 caracteres.")
+    reader = PdfReader(str(_ensure_pdf(input_pdf)))
+    if reader.is_encrypted:
+        raise PDFToolError("Este PDF já está protegido. Desproteja-o antes de criar uma nova senha.")
+    writer = PdfWriter()
+    writer.clone_document_from_reader(reader)
+    try:
+        writer.encrypt(password, owner_password=password, algorithm="AES-256")
+    except ImportError as exc:
+        raise PDFToolError("O componente de criptografia AES não está disponível.") from exc
+    return _write_pdf(writer, output_pdf)
+
+
+def unprotect_pdf(
+    input_pdf: str | Path,
+    output_pdf: str | Path,
+    password: str,
+) -> Path:
+    """Remove a criptografia quando a senha fornecida é válida."""
+    if not password:
+        raise PDFToolError("Informe a senha do PDF.")
+    reader = PdfReader(str(_ensure_pdf(input_pdf)))
+    if not reader.is_encrypted:
+        raise PDFToolError("Este PDF não possui proteção por senha.")
+    try:
+        result = reader.decrypt(password)
+    except Exception as exc:
+        raise PDFToolError("Não foi possível abrir o PDF com essa senha.") from exc
+    if int(result) == 0:
+        raise PDFToolError("Senha incorreta.")
+    writer = PdfWriter()
+    writer.clone_document_from_reader(reader)
+    return _write_pdf(writer, output_pdf)
+
+
 def page_count(input_pdf: str | Path) -> int:
     return len(PdfReader(str(_ensure_pdf(input_pdf))).pages)
 
@@ -187,4 +231,3 @@ def _write_pdf(writer: PdfWriter, output_pdf: str | Path) -> Path:
     with target.open("wb") as stream:
         writer.write(stream)
     return target
-

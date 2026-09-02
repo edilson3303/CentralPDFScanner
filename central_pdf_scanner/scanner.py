@@ -21,6 +21,11 @@ WIA_FORMAT_JPEG = "{B96B3CAE-0728-11D3-9D7B-0000F81EF32E}"
 class ScannerDevice:
     device_id: str
     name: str
+    connection_type: str
+
+    @property
+    def display_name(self) -> str:
+        return f"[{self.connection_type}] {self.name}"
 
 
 def _win32_client():
@@ -39,8 +44,26 @@ def list_scanners() -> list[ScannerDevice]:
         if int(info.Type) != WIA_SCANNER_DEVICE_TYPE:
             continue
         name = str(info.Properties("Name").Value)
-        devices.append(ScannerDevice(str(info.DeviceID), name))
+        device_id = str(info.DeviceID)
+        details = [device_id, name]
+        try:
+            details.extend(str(prop.Value) for prop in info.Properties)
+        except Exception:
+            pass
+        connection_type = _detect_connection_type(" ".join(details))
+        devices.append(ScannerDevice(device_id, name, connection_type))
     return devices
+
+
+def _detect_connection_type(details: str) -> str:
+    value = details.upper().replace("Í", "I")
+    network_hints = ("WSD", "TCPIP", "TCP/IP", "NETWORK", "REDE", "WI-FI", "WIFI", "ETHERNET", "WIAIP")
+    usb_hints = ("USB\\", "\\USB", "VID_", "USBSCAN", "USB ")
+    if any(hint in value for hint in network_hints):
+        return "Rede"
+    if any(hint in value for hint in usb_hints):
+        return "USB / conectado"
+    return "Instalado no Windows"
 
 
 def _property(item, property_id: int):
@@ -109,4 +132,3 @@ def scan_to_pdf(
         if use_ocr:
             return images_to_searchable_pdf(images, output_pdf, language, app_dir)
         return images_to_pdf(images, output_pdf)
-

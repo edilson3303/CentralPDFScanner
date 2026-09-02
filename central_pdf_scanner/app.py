@@ -12,7 +12,16 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from . import __version__
 from .ocr import find_tesseract
-from .pdf_tools import crop_pdf, images_to_pdf, merge_pdfs, pdf_to_jpg, remove_pages, rotate_pages
+from .pdf_tools import (
+    crop_pdf,
+    images_to_pdf,
+    merge_pdfs,
+    pdf_to_jpg,
+    protect_pdf,
+    remove_pages,
+    rotate_pages,
+    unprotect_pdf,
+)
 from .scanner import list_scanners, scan_to_pdf
 from .word_tools import pdf_to_word, word_to_pdf
 
@@ -33,8 +42,8 @@ class CentralApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title(f"{APP_TITLE} {__version__}")
-        self.geometry("980x690")
-        self.minsize(780, 600)
+        self.geometry("980x760")
+        self.minsize(780, 650)
         self.configure(bg="#f4f7fb")
         self._results: queue.Queue[tuple[str, object]] = queue.Queue()
         self._busy = False
@@ -73,7 +82,7 @@ class CentralApp(tk.Tk):
         grid.pack(fill="both", expand=True)
         for column in range(3):
             grid.columnconfigure(column, weight=1, uniform="cards")
-        for row in range(3):
+        for row in range(4):
             grid.rowconfigure(row, weight=1, uniform="cards")
 
         actions = [
@@ -86,6 +95,8 @@ class CentralApp(tk.Tk):
             ("PDF para JPG", self.to_jpg),
             ("JPG para PDF", self.from_images),
             ("Girar páginas", self.rotate),
+            ("Proteger PDF", self.protect),
+            ("Desproteger PDF", self.unprotect),
         ]
         for index, (label, command) in enumerate(actions):
             button = ttk.Button(grid, text=label, command=command, style="Card.TButton")
@@ -241,6 +252,30 @@ class CentralApp(tk.Tk):
         if output:
             self._run("Convertendo Word para PDF...", word_to_pdf, source, output)
 
+    def protect(self) -> None:
+        source = self._pick_pdf("Escolha o PDF que será protegido")
+        if not source:
+            return
+        dialog = PasswordDialog(self, "Proteger PDF", confirm=True)
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
+        output = self._save_pdf("Salvar PDF protegido", f"{Path(source).stem}_protegido.pdf")
+        if output:
+            self._run("Protegendo PDF com AES-256...", protect_pdf, source, output, dialog.result)
+
+    def unprotect(self) -> None:
+        source = self._pick_pdf("Escolha o PDF protegido")
+        if not source:
+            return
+        dialog = PasswordDialog(self, "Desproteger PDF", confirm=False)
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
+        output = self._save_pdf("Salvar PDF sem senha", f"{Path(source).stem}_sem_senha.pdf")
+        if output:
+            self._run("Removendo proteção do PDF...", unprotect_pdf, source, output, dialog.result)
+
     def scan(self) -> None:
         try:
             devices = list_scanners()
@@ -347,11 +382,46 @@ class RotateDialog(BaseDialog):
         self.destroy()
 
 
+class PasswordDialog(BaseDialog):
+    def __init__(self, parent: tk.Misc, title: str, *, confirm: bool) -> None:
+        super().__init__(parent, title)
+        self.confirm_required = confirm
+        ttk.Label(self.body, text="Senha").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.password = ttk.Entry(self.body, width=34, show="•")
+        self.password.grid(row=0, column=1, pady=5)
+        self.password.focus_set()
+        self.confirmation = None
+        if confirm:
+            ttk.Label(self.body, text="Confirmar senha").grid(row=1, column=0, sticky="w", padx=(0, 12), pady=5)
+            self.confirmation = ttk.Entry(self.body, width=34, show="•")
+            self.confirmation.grid(row=1, column=1, pady=5)
+            ttk.Label(self.body, text="Mínimo de 4 caracteres. Guarde a senha em local seguro.").grid(
+                row=2, column=0, columnspan=2, sticky="w", pady=(8, 0)
+            )
+        self.bind("<Return>", lambda _event: self.accept())
+        self.buttons(self.accept)
+
+    def accept(self) -> None:
+        password = self.password.get()
+        if not password:
+            messagebox.showerror(APP_TITLE, "Informe a senha.", parent=self)
+            return
+        if self.confirm_required:
+            if len(password) < 4:
+                messagebox.showerror(APP_TITLE, "Use uma senha com pelo menos 4 caracteres.", parent=self)
+                return
+            if self.confirmation is None or password != self.confirmation.get():
+                messagebox.showerror(APP_TITLE, "As senhas não coincidem.", parent=self)
+                return
+        self.result = password
+        self.destroy()
+
+
 class ScanDialog(BaseDialog):
     def __init__(self, parent: tk.Misc, devices, ocr_available: bool) -> None:
         super().__init__(parent, "Digitalizar documento")
         self.devices = devices
-        labels = [device.name for device in devices]
+        labels = [device.display_name for device in devices]
         fields = (("Scanner", labels), ("Resolução", ("150", "200", "300", "400", "600")), ("Modo", ("Cor", "Cinza", "Preto e branco")))
         self.combos = []
         for row, (label, values) in enumerate(fields):
@@ -367,6 +437,10 @@ class ScanDialog(BaseDialog):
         self.language = ttk.Combobox(self.body, values=("por", "por+eng", "eng"), width=34)
         self.language.set("por+eng")
         self.language.grid(row=4, column=1, pady=5)
+        ttk.Label(
+            self.body,
+            text="A lista inclui scanners de rede e USB instalados no Windows.",
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
         self.buttons(self.accept)
 
     def accept(self) -> None:

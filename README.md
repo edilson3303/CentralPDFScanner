@@ -5,10 +5,13 @@ Aplicativo desktop portátil para Windows 10/11, em português, que reúne scann
 ## Funções
 
 - Digitalizar usando scanners instalados no Windows, inclusive multifuncionais de rede
+- Escolher na lista scanners de rede, USB ou outros scanners instalados no Windows
 - Escolher digitalização normal ou PDF pesquisável com OCR
 - Remover páginas, juntar PDFs, cortar margens e girar páginas
 - Converter PDF para Word e Word para PDF
 - Converter PDF para JPG e JPG/PNG/TIFF/BMP para PDF
+- Proteger PDFs com senha e criptografia AES-256
+- Desproteger PDFs mediante a senha correta
 - Digitalizar várias páginas no mesmo documento
 
 ## Usar pelo código-fonte
@@ -33,4 +36,3 @@ O scanner precisa ter driver WIA e estar cadastrado em **Configurações > Bluet
 ```cmd
 py -3 -m unittest discover -s tests -v
 ```
-

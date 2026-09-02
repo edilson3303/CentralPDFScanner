@@ -15,9 +15,12 @@ from central_pdf_scanner.pdf_tools import (
     merge_pdfs,
     parse_page_spec,
     pdf_to_jpg,
+    protect_pdf,
     remove_pages,
     rotate_pages,
+    unprotect_pdf,
 )
+from central_pdf_scanner.scanner import _detect_connection_type
 from central_pdf_scanner.word_tools import pdf_to_word
 from central_pdf_scanner.ocr import find_tesseract, images_to_searchable_pdf
 from central_pdf_scanner.word_tools import word_to_pdf
@@ -83,6 +86,28 @@ class PDFToolsTests(unittest.TestCase):
         output = pdf_to_word(self.source, self.root / "saida.docx")
         self.assertTrue(output.is_file())
         self.assertGreater(output.stat().st_size, 0)
+
+    def test_protect_and_unprotect_pdf(self) -> None:
+        protected = protect_pdf(self.source, self.root / "protegido.pdf", "Senha123")
+        encrypted_reader = PdfReader(str(protected))
+        self.assertTrue(encrypted_reader.is_encrypted)
+        self.assertEqual(int(encrypted_reader.decrypt("Senha123")), 2)
+        self.assertEqual(len(encrypted_reader.pages), 3)
+
+        unprotected = unprotect_pdf(protected, self.root / "sem_senha.pdf", "Senha123")
+        open_reader = PdfReader(str(unprotected))
+        self.assertFalse(open_reader.is_encrypted)
+        self.assertEqual(len(open_reader.pages), 3)
+
+    def test_unprotect_rejects_wrong_password(self) -> None:
+        protected = protect_pdf(self.source, self.root / "protegido.pdf", "Senha123")
+        with self.assertRaisesRegex(PDFToolError, "Senha incorreta"):
+            unprotect_pdf(protected, self.root / "falha.pdf", "errada")
+
+    def test_scanner_connection_type_labels(self) -> None:
+        self.assertEqual(_detect_connection_type(r"USBSCAN\\VID_1234"), "USB / conectado")
+        self.assertEqual(_detect_connection_type("SWD DAFWSDProvider WSD Scanner"), "Rede")
+        self.assertEqual(_detect_connection_type("Scanner virtual"), "Instalado no Windows")
 
     def test_ocr_searchable_pdf_when_available(self) -> None:
         if find_tesseract() is None:
