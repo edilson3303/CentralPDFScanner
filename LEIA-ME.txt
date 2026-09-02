@@ -1,0 +1,33 @@
+CENTRAL PDF & SCANNER 1.0
+=========================
+
+COMO ABRIR A VERSAO PORTATIL
+1. Extraia todo o arquivo CentralPDFScanner_Portable.zip.
+2. Abra a pasta extraida.
+3. Execute CentralPDFScanner.exe.
+4. Nao mova apenas o EXE: mantenha toda a pasta junta.
+
+SCANNER DE REDE
+- O scanner deve aparecer em Configuracoes do Windows > Bluetooth e dispositivos
+  > Impressoras e scanners.
+- Instale o driver completo/WIA do fabricante da multifuncional.
+- Estar visivel apenas como impressora nao basta: o componente de scanner tambem
+  precisa estar instalado.
+- O programa usa WIA, padrao do Windows. Alguns aparelhos antigos oferecem apenas
+  TWAIN; nesses casos, instale o driver WIA mais recente do fabricante.
+
+OCR
+- O OCR cria PDF pesquisavel, mantendo a imagem digitalizada.
+- O mecanismo Tesseract pode ser incluido automaticamente pelo build_portable.bat
+  quando estiver instalado em C:\Program Files\Tesseract-OCR.
+- Idiomas recomendados: por ou por+eng.
+
+CONVERSOES WORD
+- Word para PDF usa primeiro o Microsoft Word instalado. Se ele nao estiver
+  disponivel, tenta o LibreOffice.
+- PDF para Word cria texto editavel e preserva o formato de modo aproximado.
+  PDFs muito diagramados podem exigir ajustes manuais.
+
+PRIVACIDADE
+- Todas as operacoes sao locais. Nenhum documento e enviado para a internet.
+
