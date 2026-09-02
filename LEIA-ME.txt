@@ -1,4 +1,4 @@
-PDF & SCANNER 1.3
+PDF & SCANNER 1.3.1
 =================
 
 COMO ABRIR A VERSAO PORTATIL
@@ -8,8 +8,8 @@ COMO ABRIR A VERSAO PORTATIL
 4. Nao mova apenas o EXE: mantenha toda a pasta junta.
 
 SCANNER DE REDE
-- Para digitar o IP, clique em "Scanner por endereco IP".
-- Informe o IP mostrado no painel da multifuncional. Normalmente use HTTP e porta 80.
+- Para digitar o IP, clique em "Scanner de rede".
+- Informe o IP mostrado no painel da multifuncional. O programa usa HTTP e porta 80 automaticamente.
 - A digitalizacao direta por IP requer que o aparelho ofereca eSCL/AirScan (Mopria).
 - Se o aparelho nao for compativel, use a opcao "Scanner instalado no Windows"
   depois de instalar o driver WIA do fabricante.

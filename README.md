@@ -32,12 +32,11 @@ Depois de extraído, o pacote abre por `CentralPDFScanner.exe` sem instalar Pyth
 
 ## Digitalizar digitando o IP
 
-1. Clique em **Scanner por endereço IP**.
+1. Clique em **Scanner de rede**.
 2. Digite o IP exibido no painel ou na configuração de rede da multifuncional.
-3. Normalmente deixe **HTTP** e porta **80**; use HTTPS/443 se o aparelho estiver configurado assim.
-4. Escolha resolução, cor e OCR e clique em **Continuar**.
+3. Escolha resolução, cor e OCR e clique em **Continuar**.
 
-Esse modo requer que a multifuncional ofereça eSCL/AirScan (também usado por aparelhos compatíveis com Mopria). Se o modelo não oferecer o protocolo, instale o driver WIA do fabricante e use **Scanner instalado no Windows**.
+Esse modo usa automaticamente HTTP e porta 80 e requer que a multifuncional ofereça eSCL/AirScan (também usado por aparelhos compatíveis com Mopria). Se o modelo não oferecer o protocolo, instale o driver WIA do fabricante e use **Scanner instalado no Windows**.
 
 ## Observações de compatibilidade
 

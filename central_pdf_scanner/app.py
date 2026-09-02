@@ -97,7 +97,7 @@ class CentralApp(tk.Tk):
             "Digitalização",
             [
                 ("Scanner instalado no Windows", self.scan),
-                ("Scanner por endereço IP", self.scan_by_ip),
+                ("Scanner de rede", self.scan_by_ip),
             ],
             columns=2,
             primary=True,
@@ -527,33 +527,23 @@ class ScanDialog(BaseDialog):
 
 class IPScanDialog(BaseDialog):
     def __init__(self, parent: tk.Misc, ocr_available: bool) -> None:
-        super().__init__(parent, "Digitalizar pelo endereço IP")
+        super().__init__(parent, "Scanner de rede")
+        self.withdraw()
         ttk.Label(self.body, text="IP da multifuncional").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=5)
         self.ip_address = ttk.Entry(self.body, width=35)
         self.ip_address.insert(0, "192.168.1.50")
         self.ip_address.grid(row=0, column=1, pady=5)
         self.ip_address.focus_set()
 
-        ttk.Label(self.body, text="Protocolo").grid(row=1, column=0, sticky="w", padx=(0, 12), pady=5)
-        self.protocol = ttk.Combobox(self.body, state="readonly", values=("HTTP", "HTTPS"), width=32)
-        self.protocol.set("HTTP")
-        self.protocol.grid(row=1, column=1, pady=5)
-        self.protocol.bind("<<ComboboxSelected>>", self._protocol_changed)
-
-        ttk.Label(self.body, text="Porta").grid(row=2, column=0, sticky="w", padx=(0, 12), pady=5)
-        self.port = ttk.Entry(self.body, width=35)
-        self.port.insert(0, "80")
-        self.port.grid(row=2, column=1, pady=5)
-
-        ttk.Label(self.body, text="Resolução").grid(row=3, column=0, sticky="w", padx=(0, 12), pady=5)
+        ttk.Label(self.body, text="Resolução").grid(row=1, column=0, sticky="w", padx=(0, 12), pady=5)
         self.dpi = ttk.Combobox(self.body, state="readonly", values=("150", "200", "300", "400", "600"), width=32)
         self.dpi.set("300")
-        self.dpi.grid(row=3, column=1, pady=5)
+        self.dpi.grid(row=1, column=1, pady=5)
 
-        ttk.Label(self.body, text="Modo").grid(row=4, column=0, sticky="w", padx=(0, 12), pady=5)
+        ttk.Label(self.body, text="Modo").grid(row=2, column=0, sticky="w", padx=(0, 12), pady=5)
         self.color = ttk.Combobox(self.body, state="readonly", values=("Cor", "Cinza", "Preto e branco"), width=32)
         self.color.set("Cor")
-        self.color.grid(row=4, column=1, pady=5)
+        self.color.grid(row=2, column=1, pady=5)
 
         self.ocr = tk.BooleanVar(value=False)
         ocr_text = "Aplicar OCR (PDF pesquisável)" if ocr_available else "Aplicar OCR (Tesseract não encontrado)"
@@ -562,35 +552,32 @@ class IPScanDialog(BaseDialog):
             text=ocr_text,
             variable=self.ocr,
             state="normal" if ocr_available else "disabled",
-        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(10, 4))
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 4))
 
-        ttk.Label(self.body, text="Idioma OCR").grid(row=6, column=0, sticky="w", padx=(0, 12), pady=5)
+        ttk.Label(self.body, text="Idioma OCR").grid(row=4, column=0, sticky="w", padx=(0, 12), pady=5)
         self.language = ttk.Combobox(self.body, values=("por", "por+eng", "eng"), width=32)
         self.language.set("por+eng")
-        self.language.grid(row=6, column=1, pady=5)
+        self.language.grid(row=4, column=1, pady=5)
         ttk.Label(
             self.body,
-            text="Requer eSCL/AirScan habilitado na multifuncional.\nNormalmente use HTTP e porta 80.",
+            text="Requer eSCL/AirScan habilitado na multifuncional.",
             foreground="#476582",
-        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(9, 0))
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(9, 0))
         self.bind("<Return>", lambda _event: self.accept())
         self.buttons(self.accept)
-
-    def _protocol_changed(self, _event=None) -> None:
-        current = self.port.get().strip()
-        if self.protocol.get() == "HTTPS" and current == "80":
-            self.port.delete(0, tk.END)
-            self.port.insert(0, "443")
-        elif self.protocol.get() == "HTTP" and current == "443":
-            self.port.delete(0, tk.END)
-            self.port.insert(0, "80")
+        self.update_idletasks()
+        width = self.winfo_reqwidth()
+        height = self.winfo_reqheight()
+        x = max(0, (self.winfo_screenwidth() - width) // 2)
+        y = max(0, (self.winfo_screenheight() - height) // 2)
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.deiconify()
 
     def accept(self) -> None:
         try:
-            port = int(self.port.get().strip())
-            address, port, protocol = validate_ip_settings(self.ip_address.get(), port, self.protocol.get())
-        except (ValueError, ESCLScannerError) as exc:
-            messagebox.showerror(APP_TITLE, str(exc) or "Informe um IP e uma porta válidos.", parent=self)
+            address, port, protocol = validate_ip_settings(self.ip_address.get(), 80, "http")
+        except ESCLScannerError as exc:
+            messagebox.showerror(APP_TITLE, str(exc), parent=self)
             return
         self.result = (
             address,
