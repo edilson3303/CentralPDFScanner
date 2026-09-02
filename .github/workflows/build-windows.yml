@@ -1,5 +1,7 @@
 name: Gerar aplicativo portatil Windows
 
+# Gera o pacote oficial sempre que uma nova versao chega ao ramo principal.
+
 on:
   workflow_dispatch:
   push:
