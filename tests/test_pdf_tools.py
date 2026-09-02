@@ -1,0 +1,113 @@
+from __future__ import annotations
+
+import tempfile
+import unittest
+from pathlib import Path
+
+import fitz
+from PIL import Image
+from pypdf import PdfReader
+
+from central_pdf_scanner.pdf_tools import (
+    PDFToolError,
+    crop_pdf,
+    images_to_pdf,
+    merge_pdfs,
+    parse_page_spec,
+    pdf_to_jpg,
+    remove_pages,
+    rotate_pages,
+)
+from central_pdf_scanner.word_tools import pdf_to_word
+from central_pdf_scanner.ocr import find_tesseract, images_to_searchable_pdf
+from central_pdf_scanner.word_tools import word_to_pdf
+from docx import Document
+
+
+def make_pdf(path: Path, pages: int = 3) -> Path:
+    document = fitz.open()
+    for index in range(pages):
+        page = document.new_page(width=595, height=842)
+        page.insert_text((72, 100), f"Página de teste {index + 1}", fontsize=18)
+    document.save(path)
+    document.close()
+    return path
+
+
+class PDFToolsTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.source = make_pdf(self.root / "entrada.pdf")
+
+    def tearDown(self) -> None:
+        self.temp.cleanup()
+
+    def test_parse_page_spec(self) -> None:
+        self.assertEqual(parse_page_spec("1,3-4", 5), [0, 2, 3])
+        with self.assertRaises(PDFToolError):
+            parse_page_spec("0", 5)
+        with self.assertRaises(PDFToolError):
+            parse_page_spec("4-2", 5)
+
+    def test_remove_pages(self) -> None:
+        output = remove_pages(self.source, self.root / "removido.pdf", "2")
+        self.assertEqual(len(PdfReader(str(output)).pages), 2)
+
+    def test_merge_pdfs(self) -> None:
+        second = make_pdf(self.root / "segundo.pdf", 2)
+        output = merge_pdfs([self.source, second], self.root / "unido.pdf")
+        self.assertEqual(len(PdfReader(str(output)).pages), 5)
+
+    def test_rotate_pages(self) -> None:
+        output = rotate_pages(self.source, self.root / "girado.pdf", 90, "2")
+        pages = PdfReader(str(output)).pages
+        self.assertEqual(pages[0].rotation, 0)
+        self.assertEqual(pages[1].rotation, 90)
+
+    def test_crop_pdf(self) -> None:
+        output = crop_pdf(self.source, self.root / "cortado.pdf", 10, 10, 10, 10, "1")
+        pages = PdfReader(str(output)).pages
+        self.assertLess(float(pages[0].cropbox.width), 595)
+        self.assertEqual(float(pages[1].cropbox.width), 595)
+
+    def test_image_round_trip(self) -> None:
+        image = self.root / "imagem.jpg"
+        Image.new("RGB", (320, 240), "navy").save(image)
+        pdf = images_to_pdf([image], self.root / "imagem.pdf")
+        outputs = pdf_to_jpg(pdf, self.root / "jpg", 100)
+        self.assertEqual(len(outputs), 1)
+        self.assertTrue(outputs[0].is_file())
+
+    def test_pdf_to_word(self) -> None:
+        output = pdf_to_word(self.source, self.root / "saida.docx")
+        self.assertTrue(output.is_file())
+        self.assertGreater(output.stat().st_size, 0)
+
+    def test_ocr_searchable_pdf_when_available(self) -> None:
+        if find_tesseract() is None:
+            self.skipTest("Tesseract não disponível")
+        image = self.root / "ocr.png"
+        canvas = Image.new("RGB", (1200, 300), "white")
+        from PIL import ImageDraw
+        ImageDraw.Draw(canvas).text((80, 100), "TESTE OCR 12345", fill="black", font_size=64)
+        canvas.save(image)
+        output = images_to_searchable_pdf([image], self.root / "ocr.pdf", language="eng")
+        text = "".join(page.extract_text() or "" for page in PdfReader(str(output)).pages)
+        self.assertIn("12345", text)
+
+    def test_word_to_pdf_when_office_available(self) -> None:
+        document = Document()
+        document.add_heading("Documento de teste", 0)
+        document.add_paragraph("Conversão Word para PDF.")
+        source = self.root / "word.docx"
+        document.save(source)
+        try:
+            output = word_to_pdf(source, self.root / "word.pdf")
+        except Exception as exc:
+            self.skipTest(f"Office/LibreOffice não disponível: {exc}")
+        self.assertEqual(len(PdfReader(str(output)).pages), 1)
+
+
+if __name__ == "__main__":
+    unittest.main()
