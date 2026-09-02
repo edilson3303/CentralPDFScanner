@@ -1,0 +1,2 @@
+Opcional: copie nesta pasta os arquivos do Tesseract OCR, incluindo tesseract.exe e a pasta tessdata.
+O build_portable.bat faz essa copia automaticamente se o Tesseract estiver instalado no local padrao.
