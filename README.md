@@ -13,14 +13,18 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 - Digitalizar frente e verso quando o alimentador da multifuncional oferecer duplex
 - Memorizar o último IP de multifuncional utilizado
 - Escolher na lista scanners de rede, USB ou outros scanners instalados no Windows
-- Escolher digitalização normal ou PDF pesquisável com OCR
-- Remover páginas, juntar PDFs, cortar margens e girar páginas
+- Salvar a digitalização em PDF ou JPG, com nome automático contendo scanner, data e hora
+- Escolher digitalização normal ou PDF pesquisável com OCR; idiomas aparecem por nome completo
+- Trabalhar visualmente com miniaturas ao remover, juntar, dividir, girar ou cortar páginas
+- Cortar margens superior e inferior em centímetros
 - Converter PDF para Word e Word para PDF
 - Converter PDF para JPG e JPG/PNG/TIFF/BMP para PDF
-- Proteger PDFs com senha e criptografia AES-256
+- Proteger PDFs contra edição com senha de proprietário e criptografia AES-256
 - Desproteger PDFs mediante a senha correta
 - Digitalizar várias páginas no mesmo documento
+- Converter PDF digitalizado em PDF pesquisável por OCR
 - Abrir as janelas internas centralizadas na tela
+- Consultar no aplicativo a licença institucional da ALEAP
 
 ## Usar pelo código-fonte
 
@@ -46,11 +50,17 @@ Ao escolher o alimentador, coloque todas as folhas na bandeja. O programa digita
 
 O último IP utilizado fica salvo em `configuracao.json`, dentro da pasta do programa portátil, e será preenchido automaticamente na próxima abertura.
 
-Esse modo usa automaticamente HTTP e porta 80 e requer que a multifuncional ofereça eSCL/AirScan (também usado por aparelhos compatíveis com Mopria). Se o modelo não oferecer o protocolo, instale o driver WIA do fabricante e use **Scanner instalado no Windows**.
+Esse modo usa automaticamente HTTP e porta 80 e requer que a multifuncional ofereça eSCL/AirScan (também usado por aparelhos compatíveis com Mopria). Se o modelo não oferecer o protocolo, instale o driver WIA do fabricante e use **Scanner USB**.
+
+Se o equipamento responder HTTP 409, normalmente ele está ocupado, há outro trabalho ativo, o alimentador está vazio ou uma configuração foi recusada. O programa repete a solicitação automaticamente antes de exibir uma orientação.
 
 ## Observações de compatibilidade
 
-No modo WIA, o scanner precisa ter o driver instalado e estar cadastrado em **Configurações > Bluetooth e dispositivos > Impressoras e scanners**. Word → PDF requer Microsoft Word ou LibreOffice instalado. PDF → Word é uma conversão local editável com preservação aproximada de layout.
+No modo WIA, o scanner precisa ter o driver instalado e estar cadastrado em **Configurações > Bluetooth e dispositivos > Impressoras e scanners**. Word → PDF requer Microsoft Word ou LibreOffice instalado. PDF → Word preserva a aparência de cada página como imagem de alta resolução; por isso, a diagramação é mantida visualmente, mas o conteúdo não fica editável como texto.
+
+## Licença
+
+O software é de titularidade da Assembleia Legislativa do Estado do Amapá. Os termos institucionais estão em `LICENCA.txt` e também no botão **Licença** do aplicativo. Componentes de terceiros mantêm suas próprias licenças.
 
 ## Testes
 

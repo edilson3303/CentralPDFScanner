@@ -10,23 +10,28 @@ from pathlib import Path
 import fitz
 from PIL import Image
 from pypdf import PdfReader
+from pypdf.constants import UserAccessPermissions
 
 from central_pdf_scanner.pdf_tools import (
     PDFToolError,
     crop_pdf,
     images_to_pdf,
     merge_pdfs,
+    merge_pdf_pages,
     parse_page_spec,
     pdf_to_jpg,
     protect_pdf,
     remove_pages,
     rotate_pages,
+    split_pdf,
+    trim_vertical_pdf,
     unprotect_pdf,
 )
 from central_pdf_scanner.scanner import _detect_connection_type
 from central_pdf_scanner.escl_scanner import (
     ESCLScannerError,
     detect_escl_sources,
+    detect_escl_info,
     probe_escl_scanner,
     scan_escl_to_pdf,
     validate_ip_settings,
@@ -88,6 +93,11 @@ class FakeESCLHandler(BaseHTTPRequestHandler):
         if self.path != "/eSCL/ScanJobs":
             self.send_error(404)
             return
+        conflicts = getattr(self.server, "job_conflicts", 0)  # type: ignore[attr-defined]
+        if conflicts:
+            self.server.job_conflicts = conflicts - 1  # type: ignore[attr-defined]
+            self.send_error(409)
+            return
         length = int(self.headers.get("Content-Length", "0"))
         self.server.scan_settings = self.rfile.read(length)  # type: ignore[attr-defined]
         self.server.documents_sent = 0  # type: ignore[attr-defined]
@@ -134,6 +144,20 @@ class PDFToolsTests(unittest.TestCase):
         self.assertLess(float(pages[0].cropbox.width), 595)
         self.assertEqual(float(pages[1].cropbox.width), 595)
 
+    def test_trim_vertical_pdf_in_centimeters(self) -> None:
+        output = trim_vertical_pdf(self.source, self.root / "vertical.pdf", 1.0, 2.0, "1")
+        pages = PdfReader(str(output)).pages
+        self.assertAlmostEqual(float(pages[0].cropbox.height), 842 - (30 * 72 / 25.4), places=2)
+        self.assertEqual(float(pages[1].cropbox.height), 842)
+
+    def test_split_and_merge_selected_pages(self) -> None:
+        outputs = split_pdf(self.source, self.root / "dividido", "1,3")
+        self.assertEqual(len(outputs), 2)
+        joined = merge_pdf_pages([(self.source, 2), (self.source, 0)], self.root / "reordenado.pdf")
+        reader = PdfReader(str(joined))
+        self.assertIn("3", reader.pages[0].extract_text())
+        self.assertIn("1", reader.pages[1].extract_text())
+
     def test_image_round_trip(self) -> None:
         image = self.root / "imagem.jpg"
         Image.new("RGB", (320, 240), "navy").save(image)
@@ -151,8 +175,14 @@ class PDFToolsTests(unittest.TestCase):
         protected = protect_pdf(self.source, self.root / "protegido.pdf", "Senha123")
         encrypted_reader = PdfReader(str(protected))
         self.assertTrue(encrypted_reader.is_encrypted)
-        self.assertEqual(int(encrypted_reader.decrypt("Senha123")), 2)
+        self.assertEqual(int(encrypted_reader.decrypt("")), 1)
         self.assertEqual(len(encrypted_reader.pages), 3)
+        permissions = encrypted_reader.user_access_permissions
+        self.assertFalse(bool(permissions & UserAccessPermissions.MODIFY))
+        self.assertFalse(bool(permissions & UserAccessPermissions.ADD_OR_MODIFY))
+
+        encrypted_reader = PdfReader(str(protected))
+        self.assertEqual(int(encrypted_reader.decrypt("Senha123")), 2)
 
         unprotected = unprotect_pdf(protected, self.root / "sem_senha.pdf", "Senha123")
         open_reader = PdfReader(str(unprotected))
@@ -191,8 +221,12 @@ class PDFToolsTests(unittest.TestCase):
         try:
             port = server.server_address[1]
             server.documents_available = 3  # type: ignore[attr-defined]
+            server.job_conflicts = 2  # type: ignore[attr-defined]
             self.assertIn("encontrado", probe_escl_scanner("127.0.0.1", port))
             self.assertEqual(detect_escl_sources("127.0.0.1", port), ("Platen", "Feeder", "FeederDuplex"))
+            name, sources = detect_escl_info("127.0.0.1", port)
+            self.assertEqual(name, "Scanner_127.0.0.1")
+            self.assertEqual(sources, ("Platen", "Feeder", "FeederDuplex"))
             output = scan_escl_to_pdf(
                 "127.0.0.1",
                 port,

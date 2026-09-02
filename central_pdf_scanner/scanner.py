@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Callable
 
 from .ocr import images_to_searchable_pdf
-from .pdf_tools import images_to_pdf
+from .pdf_tools import images_to_pdf, save_images_as_jpg
 
 
 class ScannerError(RuntimeError):
@@ -113,7 +113,9 @@ def scan_to_pdf(
     language: str = "por+eng",
     app_dir: str | Path | None = None,
     ask_next_page: Callable[[int], bool] | None = None,
-) -> Path:
+    output_format: str = "PDF",
+    filename_prefix: str = "Scan",
+) -> Path | list[Path]:
     if dpi not in (150, 200, 300, 400, 600):
         raise ScannerError("Resolução inválida.")
     client = _win32_client()
@@ -166,6 +168,8 @@ def scan_to_pdf(
                 break
             page_number += 1
 
+        if output_format.upper() == "JPG":
+            return save_images_as_jpg(images, output_pdf, filename_prefix)
         if use_ocr:
             return images_to_searchable_pdf(images, output_pdf, language, app_dir)
         return images_to_pdf(images, output_pdf)

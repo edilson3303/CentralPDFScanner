@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import re
+import shutil
 from pathlib import Path
 from typing import Iterable, Sequence
 
 import fitz  # PyMuPDF
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
+from pypdf.constants import UserAccessPermissions
 
 
 class PDFToolError(RuntimeError):
@@ -74,6 +76,47 @@ def merge_pdfs(inputs: Sequence[str | Path], output_pdf: str | Path) -> Path:
         for page in reader.pages:
             writer.add_page(page)
     return _write_pdf(writer, output_pdf)
+
+
+def merge_pdf_pages(page_refs: Sequence[tuple[str | Path, int]], output_pdf: str | Path) -> Path:
+    """Une paginas individuais, preservando a ordem visual escolhida."""
+    if not page_refs:
+        raise PDFToolError("Selecione ao menos uma pagina.")
+    readers: dict[Path, PdfReader] = {}
+    writer = PdfWriter()
+    for source_value, index in page_refs:
+        source = _ensure_pdf(source_value)
+        reader = readers.setdefault(source, PdfReader(str(source)))
+        if index < 0 or index >= len(reader.pages):
+            raise PDFToolError(f"A pagina {index + 1} nao existe em {source.name}.")
+        writer.add_page(reader.pages[index])
+    return _write_pdf(writer, output_pdf)
+
+
+def split_pdf(input_pdf: str | Path, output_dir: str | Path, page_spec: str = "") -> list[Path]:
+    """Cria um PDF separado para cada pagina selecionada."""
+    source = _ensure_pdf(input_pdf)
+    reader = PdfReader(str(source))
+    selected = parse_page_spec(page_spec, len(reader.pages), allow_empty=True)
+    destination = Path(output_dir)
+    destination.mkdir(parents=True, exist_ok=True)
+    outputs: list[Path] = []
+    for index in selected:
+        writer = PdfWriter()
+        writer.add_page(reader.pages[index])
+        outputs.append(_write_pdf(writer, destination / f"{source.stem}_pagina_{index + 1:03d}.pdf"))
+    return outputs
+
+
+def trim_vertical_pdf(
+    input_pdf: str | Path,
+    output_pdf: str | Path,
+    top_cm: float,
+    bottom_cm: float,
+    page_spec: str = "",
+) -> Path:
+    """Recorta somente as margens superior e inferior, informadas em centimetros."""
+    return crop_pdf(input_pdf, output_pdf, 0, top_cm * 10, 0, bottom_cm * 10, page_spec)
 
 
 def rotate_pages(
@@ -175,12 +218,32 @@ def images_to_pdf(images: Iterable[str | Path], output_pdf: str | Path) -> Path:
             image.close()
 
 
+def save_images_as_jpg(
+    images: Iterable[str | Path], output_dir: str | Path, filename_prefix: str
+) -> list[Path]:
+    files = [Path(item) for item in images]
+    if not files:
+        raise PDFToolError("Nenhuma imagem foi recebida.")
+    destination = Path(output_dir)
+    destination.mkdir(parents=True, exist_ok=True)
+    outputs: list[Path] = []
+    for index, source in enumerate(files, 1):
+        target = destination / f"{filename_prefix}_pagina_{index:03d}.jpg"
+        try:
+            with Image.open(source) as image:
+                image.convert("RGB").save(target, "JPEG", quality=94)
+        except Exception:
+            shutil.copy2(source, target)
+        outputs.append(target)
+    return outputs
+
+
 def protect_pdf(
     input_pdf: str | Path,
     output_pdf: str | Path,
     password: str,
 ) -> Path:
-    """Protege um PDF com criptografia AES-256 e senha de abertura."""
+    """Restringe edicao com AES-256; o PDF continua abrindo sem senha."""
     if not password:
         raise PDFToolError("A senha não pode ficar vazia.")
     if len(password) < 4:
@@ -191,7 +254,18 @@ def protect_pdf(
     writer = PdfWriter()
     writer.clone_document_from_reader(reader)
     try:
-        writer.encrypt(password, owner_password=password, algorithm="AES-256")
+        permissions = (
+            UserAccessPermissions.PRINT
+            | UserAccessPermissions.PRINT_TO_REPRESENTATION
+            | UserAccessPermissions.EXTRACT
+            | UserAccessPermissions.EXTRACT_TEXT_AND_GRAPHICS
+        )
+        writer.encrypt(
+            user_password="",
+            owner_password=password,
+            permissions_flag=permissions,
+            algorithm="AES-256",
+        )
     except ImportError as exc:
         raise PDFToolError("O componente de criptografia AES não está disponível.") from exc
     return _write_pdf(writer, output_pdf)

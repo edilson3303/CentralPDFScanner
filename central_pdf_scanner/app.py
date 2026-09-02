@@ -7,32 +7,49 @@ import subprocess
 import sys
 import threading
 import traceback
+import re
+from datetime import datetime
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 
 from . import __version__
-from .escl_scanner import ESCLScannerError, detect_escl_sources, scan_escl_to_pdf, validate_ip_settings
-from .ocr import find_tesseract
+from .escl_scanner import ESCLScannerError, detect_escl_info, scan_escl_to_pdf, validate_ip_settings
+from .ocr import find_tesseract, pdf_to_searchable_pdf
 from .pdf_tools import (
     crop_pdf,
     images_to_pdf,
     merge_pdfs,
+    merge_pdf_pages,
     pdf_to_jpg,
     protect_pdf,
     remove_pages,
     rotate_pages,
+    split_pdf,
+    trim_vertical_pdf,
     unprotect_pdf,
 )
 from .scanner import list_scanners, scan_to_pdf
 from .word_tools import pdf_to_word, word_to_pdf
+from .thumbnail_dialogs import MergePagesDialog, PageSelectionDialog
 
 
 APP_TITLE = "PDF & Scanner"
 PDF_TYPES = [("Arquivo PDF", "*.pdf")]
 WORD_TYPES = [("Documento Word", "*.docx")]
 IMAGE_TYPES = [("Imagens", "*.jpg *.jpeg *.png *.bmp *.tif *.tiff")]
+OCR_LANGUAGES = {
+    "Português": "por",
+    "Português + Inglês": "por+eng",
+    "Inglês": "eng",
+}
+
+
+def default_scan_basename(scanner_name: str) -> str:
+    safe = re.sub(r'[<>:"/\\|?*]+', "_", scanner_name).strip(" ._") or "Scanner"
+    safe = re.sub(r"\s+", "_", safe)
+    return f"Scan_{safe}_{datetime.now():%Y-%m-%d_%H-%M-%S}"
 
 
 def app_directory() -> Path:
@@ -122,7 +139,7 @@ class CentralApp(tk.Tk):
             content,
             "Digitalização",
             [
-                ("Scanner instalado no Windows", self.scan),
+                ("Scanner USB", self.scan),
                 ("Scanner de rede", self.scan_by_ip),
             ],
             columns=2,
@@ -134,10 +151,11 @@ class CentralApp(tk.Tk):
             [
                 ("Remover páginas", self.remove),
                 ("Juntar PDFs", self.merge),
-                ("Cortar PDF", self.crop),
-                ("Girar páginas", self.rotate),
                 ("Proteger PDF", self.protect),
+                ("Girar páginas", self.rotate),
+                ("Dividir PDF", self.divide),
                 ("Desproteger PDF", self.unprotect),
+                ("Cortar superior/inferior", self.trim),
             ],
             columns=3,
         ).pack(fill="x", pady=(0, 12))
@@ -148,13 +166,15 @@ class CentralApp(tk.Tk):
                 ("PDF para Word", self.to_word),
                 ("Word para PDF", self.from_word),
                 ("PDF para JPG", self.to_jpg),
-                ("Imagens para PDF", self.from_images),
+                ("JPG para PDF", self.from_images),
+                ("PDF digitalizado para OCR", self.to_ocr),
             ],
-            columns=4,
+            columns=3,
         ).pack(fill="x")
 
         footer = ttk.Frame(self, padding=(20, 0, 20, 18))
         footer.pack(fill="x")
+        ttk.Button(footer, text="Licença", command=self.show_license).pack(side="left", padx=(0, 8))
         self.progress = ttk.Progressbar(footer, mode="indeterminate", length=150)
         self.progress.pack(side="right", padx=(10, 0))
         self.status = ttk.Label(footer, text="Pronto. Seus arquivos permanecem no computador.", style="Status.TLabel")
@@ -164,9 +184,16 @@ class CentralApp(tk.Tk):
         section = ttk.LabelFrame(parent, text=f"  {title}  ", style="Section.TLabelframe", padding=(12, 10))
         for column in range(columns):
             section.columnconfigure(column, weight=1, uniform=f"{title}-buttons")
-        button_style = "Primary.Card.TButton" if primary else "Card.TButton"
         for index, (label, command) in enumerate(actions):
-            ttk.Button(section, text=label, command=command, style=button_style).grid(
+            if primary:
+                button = tk.Button(
+                    section, text=label, command=command, bg="#2f65ad", fg="white",
+                    activebackground="#173b67", activeforeground="white", relief="flat",
+                    font=("Segoe UI", 11, "bold"), padx=14, pady=14, cursor="hand2",
+                )
+            else:
+                button = ttk.Button(section, text=label, command=command, style="Card.TButton")
+            button.grid(
                 row=index // columns,
                 column=index % columns,
                 sticky="nsew",
@@ -240,7 +267,7 @@ class CentralApp(tk.Tk):
         source = self._pick_pdf("Escolha o PDF")
         if not source:
             return
-        dialog = TextInputDialog(self, "Remover páginas", "Páginas a remover (ex.: 2,4-6):")
+        dialog = PageSelectionDialog(self, source, "remove")
         self.wait_window(dialog)
         pages = dialog.result
         if not pages:
@@ -255,28 +282,47 @@ class CentralApp(tk.Tk):
             if sources:
                 messagebox.showwarning(APP_TITLE, "Selecione pelo menos dois PDFs.", parent=self)
             return
+        dialog = MergePagesDialog(self, list(sources))
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
         output = self._save_pdf("Salvar PDF unido", "pdfs_unidos.pdf")
         if output:
-            self._run("Juntando PDFs...", merge_pdfs, list(sources), output)
+            self._run("Juntando PDFs...", merge_pdf_pages, dialog.result, output)
 
     def crop(self) -> None:
         source = self._pick_pdf("Escolha o PDF")
         if not source:
             return
-        dialog = CropDialog(self)
+        dialog = PageSelectionDialog(self, source, "divide")
         self.wait_window(dialog)
         if dialog.result is None:
             return
-        output = self._save_pdf("Salvar PDF cortado", f"{Path(source).stem}_cortado.pdf")
+        folder = filedialog.askdirectory(parent=self, title="Escolha a pasta para as paginas divididas")
+        if folder:
+            self._run("Dividindo PDF...", split_pdf, source, folder, dialog.result)
+
+    def divide(self) -> None:
+        self.crop()
+
+    def trim(self) -> None:
+        source = self._pick_pdf("Escolha o PDF")
+        if not source:
+            return
+        dialog = PageSelectionDialog(self, source, "trim")
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
+        top, bottom, pages = dialog.result
+        output = self._save_pdf("Salvar PDF recortado", f"{Path(source).stem}_margens_cortadas.pdf")
         if output:
-            left, top, right, bottom, pages = dialog.result
-            self._run("Cortando PDF...", crop_pdf, source, output, left, top, right, bottom, pages)
+            self._run("Cortando margens...", trim_vertical_pdf, source, output, top, bottom, pages)
 
     def rotate(self) -> None:
         source = self._pick_pdf("Escolha o PDF")
         if not source:
             return
-        dialog = RotateDialog(self)
+        dialog = PageSelectionDialog(self, source, "rotate")
         self.wait_window(dialog)
         if dialog.result is None:
             return
@@ -305,6 +351,21 @@ class CentralApp(tk.Tk):
         output = self._save_pdf("Salvar PDF", "imagens_convertidas.pdf")
         if output:
             self._run("Convertendo imagens para PDF...", images_to_pdf, list(sources), output)
+
+    def to_ocr(self) -> None:
+        source = self._pick_pdf("Escolha o PDF digitalizado")
+        if not source:
+            return
+        dialog = LanguageDialog(self)
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
+        output = self._save_pdf("Salvar PDF com OCR", f"{Path(source).stem}_OCR.pdf")
+        if output:
+            self._run("Aplicando OCR ao PDF...", pdf_to_searchable_pdf, source, output, dialog.result, app_directory())
+
+    def show_license(self) -> None:
+        LicenseDialog(self)
 
     def to_word(self) -> None:
         source = self._pick_pdf("Escolha o PDF")
@@ -359,8 +420,12 @@ class CentralApp(tk.Tk):
         self.wait_window(dialog)
         if dialog.result is None:
             return
-        device_id, dpi, color, input_source, use_ocr, language = dialog.result
-        output = self._save_pdf("Salvar digitalização", "digitalizacao.pdf")
+        device_id, device_name, dpi, color, input_source, output_format, use_ocr, language = dialog.result
+        basename = default_scan_basename(device_name)
+        if output_format == "PDF":
+            output = self._save_pdf("Salvar digitalização", f"{basename}.pdf")
+        else:
+            output = filedialog.askdirectory(parent=self, title="Escolha a pasta para os arquivos JPG")
         if not output:
             return
 
@@ -376,6 +441,8 @@ class CentralApp(tk.Tk):
             language=language,
             app_dir=app_directory(),
             ask_next_page=self._ask_next_page,
+            output_format=output_format,
+            filename_prefix=basename,
         )
 
     def _ask_next_page(self, page: int) -> bool:
@@ -399,9 +466,13 @@ class CentralApp(tk.Tk):
         self.wait_window(dialog)
         if dialog.result is None:
             return
-        ip_address, port, protocol, dpi, color, input_source, use_ocr, language = dialog.result
+        ip_address, scanner_name, port, protocol, dpi, color, input_source, output_format, use_ocr, language = dialog.result
         _save_last_scanner_ip(ip_address)
-        output = self._save_pdf("Salvar digitalização por IP", "digitalizacao_ip.pdf")
+        basename = default_scan_basename(scanner_name)
+        if output_format == "PDF":
+            output = self._save_pdf("Salvar digitalização por IP", f"{basename}.pdf")
+        else:
+            output = filedialog.askdirectory(parent=self, title="Escolha a pasta para os arquivos JPG")
         if not output:
             return
         self._run(
@@ -418,6 +489,8 @@ class CentralApp(tk.Tk):
             language=language,
             app_dir=app_directory(),
             ask_next_page=self._ask_next_page,
+            output_format=output_format,
+            filename_prefix=basename,
         )
 
 
@@ -580,6 +653,53 @@ class PasswordDialog(BaseDialog):
         self.destroy()
 
 
+class LanguageDialog(BaseDialog):
+    def __init__(self, parent: tk.Misc) -> None:
+        super().__init__(parent, "Idioma do OCR")
+        ttk.Label(self.body, text="Idioma do documento").grid(row=0, column=0, padx=(0, 12), pady=5)
+        self.language = ttk.Combobox(
+            self.body, state="readonly", values=tuple(OCR_LANGUAGES), width=30
+        )
+        self.language.set("Português + Inglês")
+        self.language.grid(row=0, column=1, pady=5)
+        self.buttons(self.accept)
+
+    def accept(self) -> None:
+        self.result = OCR_LANGUAGES[self.language.get()]
+        self.destroy()
+
+
+class LicenseDialog(BaseDialog):
+    def __init__(self, parent: tk.Misc) -> None:
+        super().__init__(parent, "Licença de uso")
+        self.resizable(True, True)
+        text = tk.Text(self.body, width=90, height=28, wrap="word", padx=12, pady=12)
+        scroll = ttk.Scrollbar(self.body, orient="vertical", command=text.yview)
+        text.configure(yscrollcommand=scroll.set)
+        try:
+            content = (app_directory() / "LICENCA.txt").read_text(encoding="utf-8")
+        except OSError:
+            content = "Termos de licença não encontrados neste pacote."
+        text.insert("1.0", content)
+        text.configure(state="disabled")
+        text.grid(row=0, column=0, sticky="nsew")
+        scroll.grid(row=0, column=1, sticky="ns")
+        self.body.rowconfigure(0, weight=1)
+        self.body.columnconfigure(0, weight=1)
+        row = ttk.Frame(self.body)
+        row.grid(row=99, column=0, columnspan=2, sticky="e", pady=(12, 0))
+        ttk.Button(row, text="Fechar", command=self.destroy).pack()
+        self.after_idle(lambda: self._show_centered_size(900, 620))
+
+    def _show_centered_size(self, width: int, height: int) -> None:
+        x = max(0, (self.winfo_screenwidth() - width) // 2)
+        y = max(0, (self.winfo_screenheight() - height) // 2)
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.deiconify()
+        self.lift()
+        self.grab_set()
+
+
 class ScanDialog(BaseDialog):
     def __init__(self, parent: tk.Misc, devices, ocr_available: bool) -> None:
         super().__init__(parent, "Digitalizar documento")
@@ -598,17 +718,21 @@ class ScanDialog(BaseDialog):
         self.source = ttk.Combobox(self.body, state="readonly", width=34)
         self.source.grid(row=3, column=1, pady=5)
         self._scanner_changed()
+        ttk.Label(self.body, text="Formato de saída").grid(row=4, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.output_format = ttk.Combobox(self.body, state="readonly", values=("PDF", "JPG"), width=34)
+        self.output_format.set("PDF")
+        self.output_format.grid(row=4, column=1, pady=5)
         self.ocr = tk.BooleanVar(value=False)
         ocr_text = "Aplicar OCR (PDF pesquisável)" if ocr_available else "Aplicar OCR (Tesseract não encontrado)"
-        ttk.Checkbutton(self.body, text=ocr_text, variable=self.ocr, state="normal" if ocr_available else "disabled").grid(row=4, column=0, columnspan=2, sticky="w", pady=(10, 4))
-        ttk.Label(self.body, text="Idioma OCR").grid(row=5, column=0, sticky="w", padx=(0, 12), pady=5)
-        self.language = ttk.Combobox(self.body, values=("por", "por+eng", "eng"), width=34)
-        self.language.set("por+eng")
-        self.language.grid(row=5, column=1, pady=5)
+        ttk.Checkbutton(self.body, text=ocr_text, variable=self.ocr, state="normal" if ocr_available else "disabled").grid(row=5, column=0, columnspan=2, sticky="w", pady=(10, 4))
+        ttk.Label(self.body, text="Idioma OCR").grid(row=6, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.language = ttk.Combobox(self.body, state="readonly", values=tuple(OCR_LANGUAGES), width=34)
+        self.language.set("Português + Inglês")
+        self.language.grid(row=6, column=1, pady=5)
         ttk.Label(
             self.body,
             text="A lista inclui scanners de rede e USB instalados no Windows.",
-        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(8, 0))
         self.buttons(self.accept)
 
     def _scanner_changed(self, _event=None) -> None:
@@ -621,11 +745,13 @@ class ScanDialog(BaseDialog):
         index = self.combos[0].current()
         self.result = (
             self.devices[index].device_id,
+            self.devices[index].name,
             int(self.combos[1].get()),
             self.combos[2].get(),
             self.source.get(),
-            bool(self.ocr.get()),
-            self.language.get().strip() or "por+eng",
+            self.output_format.get(),
+            bool(self.ocr.get()) if self.output_format.get() == "PDF" else False,
+            OCR_LANGUAGES[self.language.get()],
         )
         self.destroy()
 
@@ -642,6 +768,7 @@ class IPScanDialog(BaseDialog):
         self._source_results: queue.Queue[tuple[str, str, object]] = queue.Queue()
         self._detect_after = None
         self._detected_ip = ""
+        self._detected_name = ""
         ttk.Label(self.body, text="IP da multifuncional").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=5)
         self.ip_address = ttk.Entry(self.body, width=35)
         self.ip_address.insert(0, last_ip)
@@ -662,6 +789,11 @@ class IPScanDialog(BaseDialog):
         self.source = ttk.Combobox(self.body, state="disabled", width=32)
         self.source.grid(row=3, column=1, pady=5)
 
+        ttk.Label(self.body, text="Formato de saída").grid(row=4, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.output_format = ttk.Combobox(self.body, state="readonly", values=("PDF", "JPG"), width=32)
+        self.output_format.set("PDF")
+        self.output_format.grid(row=4, column=1, pady=5)
+
         self.ocr = tk.BooleanVar(value=False)
         ocr_text = "Aplicar OCR (PDF pesquisável)" if ocr_available else "Aplicar OCR (Tesseract não encontrado)"
         ttk.Checkbutton(
@@ -669,18 +801,18 @@ class IPScanDialog(BaseDialog):
             text=ocr_text,
             variable=self.ocr,
             state="normal" if ocr_available else "disabled",
-        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(10, 4))
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(10, 4))
 
-        ttk.Label(self.body, text="Idioma OCR").grid(row=5, column=0, sticky="w", padx=(0, 12), pady=5)
-        self.language = ttk.Combobox(self.body, values=("por", "por+eng", "eng"), width=32)
-        self.language.set("por+eng")
-        self.language.grid(row=5, column=1, pady=5)
+        ttk.Label(self.body, text="Idioma OCR").grid(row=6, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.language = ttk.Combobox(self.body, state="readonly", values=tuple(OCR_LANGUAGES), width=32)
+        self.language.set("Português + Inglês")
+        self.language.grid(row=6, column=1, pady=5)
         self.detection_status = ttk.Label(
             self.body,
             text="Digite o IP para detectar vidro e alimentador.",
             foreground="#476582",
         )
-        self.detection_status.grid(row=6, column=0, columnspan=2, sticky="w", pady=(9, 0))
+        self.detection_status.grid(row=7, column=0, columnspan=2, sticky="w", pady=(9, 0))
         self.ip_address.bind("<KeyRelease>", self._schedule_detection)
         self.bind("<Return>", lambda _event: self.accept())
         self.buttons(self.accept)
@@ -692,6 +824,7 @@ class IPScanDialog(BaseDialog):
         if self._detect_after is not None:
             self.after_cancel(self._detect_after)
         self._detected_ip = ""
+        self._detected_name = ""
         self.source.set("")
         self.source.configure(state="disabled", values=())
         self.detection_status.configure(text="Aguardando o endereço IP...")
@@ -708,8 +841,8 @@ class IPScanDialog(BaseDialog):
 
         def worker() -> None:
             try:
-                sources = detect_escl_sources(address, 80, "http")
-                self._source_results.put((address, "ok", sources))
+                info = detect_escl_info(address, 80, "http")
+                self._source_results.put((address, "ok", info))
             except Exception as exc:
                 self._source_results.put((address, "error", str(exc)))
 
@@ -723,11 +856,13 @@ class IPScanDialog(BaseDialog):
             return
         if address == self.ip_address.get().strip():
             if kind == "ok":
-                values = [self.SOURCE_LABELS[source] for source in payload]
+                scanner_name, sources = payload
+                values = [self.SOURCE_LABELS[source] for source in sources]
                 self.source.configure(state="readonly", values=values)
                 self.source.current(0)
                 self._detected_ip = address
-                self.detection_status.configure(text="Origens detectadas automaticamente.")
+                self._detected_name = scanner_name
+                self.detection_status.configure(text=f"{scanner_name} - origens detectadas automaticamente.")
             else:
                 self.detection_status.configure(text=str(payload))
         self.after(100, self._poll_source_results)
@@ -745,13 +880,15 @@ class IPScanDialog(BaseDialog):
         source_code = next(code for code, label in self.SOURCE_LABELS.items() if label == self.source.get())
         self.result = (
             address,
+            self._detected_name or f"Scanner_{address}",
             port,
             protocol,
             int(self.dpi.get()),
             self.color.get(),
             source_code,
-            bool(self.ocr.get()),
-            self.language.get().strip() or "por+eng",
+            self.output_format.get(),
+            bool(self.ocr.get()) if self.output_format.get() == "PDF" else False,
+            OCR_LANGUAGES[self.language.get()],
         )
         self.destroy()
 

@@ -15,7 +15,7 @@ import fitz
 from PIL import Image
 
 from .ocr import images_to_searchable_pdf
-from .pdf_tools import images_to_pdf
+from .pdf_tools import images_to_pdf, save_images_as_jpg
 
 
 class ESCLScannerError(RuntimeError):
@@ -66,8 +66,15 @@ def _friendly_network_error(exc: Exception) -> ESCLScannerError:
         if exc.code in (404, 405):
             return ESCLScannerError(
                 "O equipamento respondeu, mas não oferece digitalização eSCL/AirScan nesse endereço. "
-                "Instale o driver WIA do fabricante e use 'Scanner instalado no Windows'."
+                "Instale o driver WIA do fabricante e use 'Scanner USB'."
             )
+        if exc.code == 409:
+            return ESCLScannerError(
+                "A multifuncional esta ocupada, possui outro trabalho ativo, o alimentador esta sem papel "
+                "ou recusou a configuracao escolhida. Coloque as folhas, aguarde alguns segundos e tente novamente."
+            )
+        if exc.code == 503:
+            return ESCLScannerError("A multifuncional esta temporariamente ocupada. Aguarde e tente novamente.")
         return ESCLScannerError(f"A multifuncional respondeu com erro HTTP {exc.code}.")
     return ESCLScannerError(
         "Não foi possível acessar a multifuncional. Confira o IP, a porta, o protocolo e se o computador está na mesma rede."
@@ -91,12 +98,12 @@ def _read_capabilities(ip_address: str, port: int, protocol: str, timeout: int) 
     return content
 
 
-def detect_escl_sources(
+def detect_escl_info(
     ip_address: str,
     port: int = 80,
     protocol: str = "http",
     timeout: int = 8,
-) -> tuple[str, ...]:
+) -> tuple[str, tuple[str, ...]]:
     content = _read_capabilities(ip_address, port, protocol, timeout)
     try:
         root = ET.fromstring(content)
@@ -104,6 +111,12 @@ def detect_escl_sources(
         raise ESCLScannerError("A multifuncional devolveu informações de digitalização inválidas.") from exc
 
     names = {element.tag.rsplit("}", 1)[-1].lower() for element in root.iter()}
+    model = ""
+    for element in root.iter():
+        tag = element.tag.rsplit("}", 1)[-1].lower()
+        if tag in {"makeandmodel", "model"} and element.text and element.text.strip():
+            model = element.text.strip()
+            break
     sources: list[str] = []
     if any(name in names for name in ("platen", "plateninputcaps")):
         sources.append("Platen")
@@ -112,7 +125,13 @@ def detect_escl_sources(
     if "adfduplexinputcaps" in names:
         sources.append("FeederDuplex")
     # Alguns equipamentos omitem a seção Platen, embora o vidro esteja disponível.
-    return tuple(sources) or ("Platen",)
+    return model or f"Scanner_{ip_address}", tuple(sources) or ("Platen",)
+
+
+def detect_escl_sources(
+    ip_address: str, port: int = 80, protocol: str = "http", timeout: int = 8
+) -> tuple[str, ...]:
+    return detect_escl_info(ip_address, port, protocol, timeout)[1]
 
 
 def probe_escl_scanner(ip_address: str, port: int = 80, protocol: str = "http", timeout: int = 8) -> str:
@@ -168,16 +187,23 @@ def _create_scan_job(
         method="POST",
     )
     opener = _opener(protocol)
-    try:
-        with opener.open(request, timeout=timeout) as response:
-            location = response.headers.get("Location", "")
-        if not location:
-            raise ESCLScannerError("A multifuncional não informou o endereço do trabalho de digitalização.")
-        return opener, _job_url(base, location)
-    except ESCLScannerError:
-        raise
-    except (OSError, urllib.error.URLError, urllib.error.HTTPError) as exc:
-        raise _friendly_network_error(exc) from exc
+    for attempt in range(6):
+        try:
+            with opener.open(request, timeout=timeout) as response:
+                location = response.headers.get("Location", "")
+            if not location:
+                raise ESCLScannerError("A multifuncional não informou o endereço do trabalho de digitalização.")
+            return opener, _job_url(base, location)
+        except urllib.error.HTTPError as exc:
+            if exc.code in (409, 503) and attempt < 5:
+                time.sleep(0.7)
+                continue
+            raise _friendly_network_error(exc) from exc
+        except ESCLScannerError:
+            raise
+        except (OSError, urllib.error.URLError) as exc:
+            raise _friendly_network_error(exc) from exc
+    raise ESCLScannerError("A multifuncional permaneceu ocupada apos varias tentativas.")
 
 
 def _next_document(
@@ -252,7 +278,9 @@ def scan_escl_to_pdf(
     language: str = "por+eng",
     app_dir: str | Path | None = None,
     ask_next_page: Callable[[int], bool] | None = None,
-) -> Path:
+    output_format: str = "PDF",
+    filename_prefix: str = "Scan",
+) -> Path | list[Path]:
     base = _base_url(ip_address, port, protocol)
     probe_escl_scanner(ip_address, port, protocol)
     with tempfile.TemporaryDirectory(prefix="pdf_scanner_ip_") as temp:
@@ -283,6 +311,8 @@ def scan_escl_to_pdf(
                     break
         if not images:
             raise ESCLScannerError("Nenhuma página foi recebida da multifuncional.")
+        if output_format.upper() == "JPG":
+            return save_images_as_jpg(images, output_pdf, filename_prefix)
         if use_ocr:
             return images_to_searchable_pdf(images, output_pdf, language, app_dir)
         return images_to_pdf(images, output_pdf)

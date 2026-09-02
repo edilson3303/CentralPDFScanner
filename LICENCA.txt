@@ -1,0 +1,30 @@
+LICENCA INSTITUCIONAL DE USO DO SOFTWARE PDF & SCANNER
+
+Titular: Assembleia Legislativa do Estado do Amapa - ALEAP
+Copyright (c) 2026 Assembleia Legislativa do Estado do Amapa. Todos os direitos reservados.
+
+1. OBJETO
+Esta licenca disciplina o uso do software PDF & Scanner, de titularidade da Assembleia Legislativa do Estado do Amapa, destinado ao apoio das atividades administrativas e institucionais da ALEAP.
+
+2. USO AUTORIZADO
+E permitido instalar, executar e copiar o software para uso interno da ALEAP, em equipamentos institucionais, por servidores, empregados, colaboradores e prestadores de servico devidamente autorizados. Tambem sao permitidas copias internas de seguranca, inventario e recuperacao.
+
+3. RESTRICOES
+Sem autorizacao formal da ALEAP, e proibido vender, sublicenciar, alugar, publicar, redistribuir externamente, disponibilizar comercialmente ou utilizar o software fora das finalidades institucionais. Alteracoes, adaptacoes e distribuicao de versoes derivadas dependem de autorizacao da unidade competente e devem preservar os avisos de titularidade.
+
+4. COMPONENTES DE TERCEIROS
+O software incorpora ou pode acompanhar componentes de terceiros, incluindo Python, PyMuPDF, pypdf, Pillow, python-docx, pywin32 e Tesseract OCR. Esses componentes permanecem sujeitos as suas respectivas licencas, avisos e condicoes, que prevalecem quanto a cada componente.
+
+5. DOCUMENTOS E DADOS
+O processamento e realizado localmente. O usuario e responsavel pela classificacao, guarda, destino e tratamento adequado dos documentos, inclusive dados pessoais e informacoes sigilosas, de acordo com as normas da ALEAP e a legislacao aplicavel.
+
+6. GARANTIAS E RESPONSABILIDADE
+O software e fornecido para uso institucional no estado em que se encontra. Deve ser validado pela area tecnica antes da implantacao ampla. A ALEAP nao se responsabiliza por perda decorrente de uso inadequado, falha de equipamento, driver, rede, componente de terceiros ou ausencia de copias de seguranca, na medida permitida pela legislacao.
+
+7. TITULARIDADE E LEGISLACAO
+Nenhuma disposicao transfere a titularidade do software. Aplicam-se a legislacao brasileira, especialmente a Lei Federal no 9.609/1998 e a Lei Federal no 9.610/1998, alem das normas internas da ALEAP.
+
+8. CONTATO E AUTORIZACOES
+Pedidos de uso externo, redistribuicao, alteracao ou esclarecimento devem ser encaminhados a unidade administrativa ou de tecnologia da informacao competente da Assembleia Legislativa do Estado do Amapa.
+
+Versao dos termos: 1.0 - 2026.

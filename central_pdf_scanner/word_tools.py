@@ -8,7 +8,7 @@ from pathlib import Path
 import fitz
 from docx import Document
 from docx.enum.section import WD_SECTION
-from docx.shared import Inches, Pt
+from docx.shared import Inches
 
 
 class WordToolError(RuntimeError):
@@ -16,7 +16,7 @@ class WordToolError(RuntimeError):
 
 
 def pdf_to_word(input_pdf: str | Path, output_docx: str | Path) -> Path:
-    """Conversão local com texto editável e posicionamento aproximado."""
+    """Preserva visualmente cada pagina do PDF dentro do Word."""
     source = Path(input_pdf)
     if not source.is_file():
         raise WordToolError("PDF não encontrado.")
@@ -24,42 +24,30 @@ def pdf_to_word(input_pdf: str | Path, output_docx: str | Path) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     pdf = fitz.open(source)
     document = Document()
-    normal = document.styles["Normal"]
-    normal.font.name = "Arial"
-    normal.font.size = Pt(10.5)
-    try:
+    with tempfile.TemporaryDirectory(prefix="pdf_word_visual_") as temp:
+      try:
         for page_index, page in enumerate(pdf):
             if page_index > 0:
                 document.add_section(WD_SECTION.NEW_PAGE)
             section = document.sections[-1]
             section.page_width = Inches(page.rect.width / 72.0)
             section.page_height = Inches(page.rect.height / 72.0)
-            section.top_margin = Inches(0.5)
-            section.bottom_margin = Inches(0.5)
-            section.left_margin = Inches(0.55)
-            section.right_margin = Inches(0.55)
-
-            blocks = sorted(page.get_text("blocks"), key=lambda b: (round(b[1], 1), b[0]))
-            text_blocks = [block for block in blocks if len(block) >= 7 and block[6] == 0 and block[4].strip()]
-            if not text_blocks:
-                pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False)
-                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_image:
-                    image_path = Path(temp_image.name)
-                try:
-                    pix.save(str(image_path))
-                    document.add_picture(str(image_path), width=Inches(max(1.0, page.rect.width / 72.0 - 1.1)))
-                finally:
-                    image_path.unlink(missing_ok=True)
-                continue
-            previous_bottom = 0.0
-            for x0, y0, x1, y1, text, *_ in text_blocks:
-                paragraph = document.add_paragraph()
-                paragraph.paragraph_format.space_before = Pt(min(12, max(0, y0 - previous_bottom) * 0.35))
-                paragraph.paragraph_format.space_after = Pt(2)
-                paragraph.add_run(text.replace("\n", " ").strip())
-                previous_bottom = y1
+            section.top_margin = Inches(0)
+            section.bottom_margin = Inches(0)
+            section.left_margin = Inches(0)
+            section.right_margin = Inches(0)
+            section.header_distance = Inches(0)
+            section.footer_distance = Inches(0)
+            image_path = Path(temp) / f"pagina_{page_index + 1:04d}.png"
+            page.get_pixmap(matrix=fitz.Matrix(2.5, 2.5), alpha=False).save(str(image_path))
+            paragraph = document.add_paragraph()
+            paragraph.paragraph_format.space_before = Inches(0)
+            paragraph.paragraph_format.space_after = Inches(0)
+            paragraph.add_run().add_picture(
+                str(image_path), width=Inches(page.rect.width / 72.0), height=Inches(page.rect.height / 72.0)
+            )
         document.save(target)
-    finally:
+      finally:
         pdf.close()
     return target
 

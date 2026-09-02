@@ -37,6 +37,7 @@ if exist "C:\Program Files\Tesseract-OCR\tesseract.exe" (
 )
 
 copy /Y "LEIA-ME.txt" "%APP_DIST%\LEIA-ME.txt" >nul
+copy /Y "LICENCA.txt" "%APP_DIST%\LICENCA.txt" >nul
 if exist "dist\CentralPDFScanner_Portable.zip" del /q "dist\CentralPDFScanner_Portable.zip"
 "%APP_VENV%\Scripts\python.exe" -c "import shutil; shutil.make_archive(r'dist\CentralPDFScanner_Portable','zip',r'dist\CentralPDFScanner_Portable')"
 if errorlevel 1 goto :error

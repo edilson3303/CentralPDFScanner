@@ -1,4 +1,4 @@
-PDF & SCANNER 1.5
+PDF & SCANNER 2.0
 =================
 
 COMO ABRIR A VERSAO PORTATIL
@@ -16,7 +16,7 @@ SCANNER DE REDE
 - Se o equipamento oferecer duplex, aparece a opcao Alimentador superior - frente e verso.
 - O ultimo IP utilizado fica gravado em configuracao.json na pasta do programa.
 - A digitalizacao direta por IP requer que o aparelho ofereca eSCL/AirScan (Mopria).
-- Se o aparelho nao for compativel, use a opcao "Scanner instalado no Windows"
+- Se o aparelho nao for compativel, use a opcao "Scanner USB"
   depois de instalar o driver WIA do fabricante.
 - O scanner deve aparecer em Configuracoes do Windows > Bluetooth e dispositivos
   > Impressoras e scanners.
@@ -29,21 +29,35 @@ SCANNER DE REDE
   USB/conectado ou Instalado no Windows. Voce pode escolher o scanner desejado.
 
 PROTEGER E DESPROTEGER PDF
-- Proteger PDF usa criptografia AES-256 e exige uma senha de abertura.
-- Desproteger PDF exige a senha correta do documento.
+- Proteger PDF usa AES-256 e uma senha de proprietario para impedir edicao.
+- O documento continua abrindo sem senha; a senha e exigida para retirar a restricao.
+- Desproteger PDF exige a senha de proprietario correta do documento.
 - Guarde a senha em local seguro: o programa nao possui mecanismo para recupera-la.
 
 OCR
 - O OCR cria PDF pesquisavel, mantendo a imagem digitalizada.
 - O mecanismo Tesseract pode ser incluido automaticamente pelo build_portable.bat
   quando estiver instalado em C:\Program Files\Tesseract-OCR.
-- Idiomas recomendados: por ou por+eng.
+- O idioma e escolhido pelo nome completo, sem digitacao livre.
+- A conversao "PDF digitalizado para OCR" torna PDFs pesquisaveis.
 
 CONVERSOES WORD
 - Word para PDF usa primeiro o Microsoft Word instalado. Se ele nao estiver
   disponivel, tenta o LibreOffice.
-- PDF para Word cria texto editavel e preserva o formato de modo aproximado.
-  PDFs muito diagramados podem exigir ajustes manuais.
+- PDF para Word preserva visualmente a diagramacao inserindo cada pagina como
+  imagem de alta resolucao. A aparencia e mantida, mas o texto nao fica editavel.
+
+EDICAO VISUAL
+- Remover, juntar, dividir, girar e cortar margens exibem miniaturas das paginas.
+- O corte superior/inferior e informado em centimetros.
+
+NOME E FORMATO DA DIGITALIZACAO
+- O nome sugerido segue Scan_NomeDoScanner_AAAA-MM-DD_HH-MM-SS.pdf.
+- A digitalizacao pode ser salva em PDF ou em arquivos JPG por pagina.
+
+LICENCA
+- Use o botao pequeno "Licenca" para ler os termos institucionais da ALEAP.
+- Uma copia dos termos acompanha o pacote em LICENCA.txt.
 
 PRIVACIDADE
 - Todas as operacoes sao locais. Nenhum documento e enviado para a internet.

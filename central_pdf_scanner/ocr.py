@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Sequence
 
 from pypdf import PdfReader, PdfWriter
+import fitz
 
 
 class OCRError(RuntimeError):
@@ -71,3 +72,28 @@ def images_to_searchable_pdf(
             writer.write(stream)
     return target
 
+
+def pdf_to_searchable_pdf(
+    input_pdf: str | Path,
+    output_pdf: str | Path,
+    language: str = "por+eng",
+    app_dir: str | Path | None = None,
+    dpi: int = 300,
+) -> Path:
+    """Renderiza um PDF digitalizado e cria uma camada de texto OCR."""
+    source = Path(input_pdf)
+    if not source.is_file() or source.suffix.lower() != ".pdf":
+        raise OCRError("PDF não encontrado.")
+    with tempfile.TemporaryDirectory(prefix="central_pdf_ocr_source_") as temp:
+        directory = Path(temp)
+        images: list[Path] = []
+        document = fitz.open(source)
+        try:
+            matrix = fitz.Matrix(dpi / 72.0, dpi / 72.0)
+            for index, page in enumerate(document):
+                image = directory / f"pagina_{index + 1:04d}.png"
+                page.get_pixmap(matrix=matrix, alpha=False).save(str(image))
+                images.append(image)
+        finally:
+            document.close()
+        return images_to_searchable_pdf(images, output_pdf, language, app_dir)
