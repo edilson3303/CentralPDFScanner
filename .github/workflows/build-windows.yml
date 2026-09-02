@@ -1,0 +1,44 @@
+name: Gerar aplicativo portatil Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Executar testes
+        run: python -m unittest discover -s tests -v
+      - name: Preparar OCR portatil
+        run: |
+          choco install tesseract --yes --no-progress
+          $tessdata = "C:\Program Files\Tesseract-OCR\tessdata"
+          Invoke-WebRequest -Uri "https://github.com/tesseract-ocr/tessdata_fast/raw/main/por.traineddata" -OutFile "$tessdata\por.traineddata"
+      - name: Gerar executavel
+        run: |
+          pyinstaller --noconfirm --clean --windowed --name CentralPDFScanner --collect-all fitz --collect-all pypdf --hidden-import win32com.client app.py
+          Rename-Item dist\CentralPDFScanner CentralPDFScanner_Portable
+          New-Item -ItemType Directory -Force -Path dist\CentralPDFScanner_Portable\engines\tesseract
+          Copy-Item "C:\Program Files\Tesseract-OCR\*" dist\CentralPDFScanner_Portable\engines\tesseract -Recurse -Force
+          Copy-Item LEIA-ME.txt dist\CentralPDFScanner_Portable\LEIA-ME.txt
+          Compress-Archive -Path dist\CentralPDFScanner_Portable\* -DestinationPath dist\CentralPDFScanner_Portable.zip
+      - name: Publicar pacote
+        uses: actions/upload-artifact@v4
+        with:
+          name: CentralPDFScanner_Portable_Windows
+          path: dist/CentralPDFScanner_Portable.zip
