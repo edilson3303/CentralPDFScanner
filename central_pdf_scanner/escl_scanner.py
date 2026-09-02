@@ -3,6 +3,7 @@ from __future__ import annotations
 import ipaddress
 import ssl
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -106,8 +107,10 @@ def detect_escl_sources(
     sources: list[str] = []
     if any(name in names for name in ("platen", "plateninputcaps")):
         sources.append("Platen")
-    if any(name in names for name in ("adf", "adfsimplexinputcaps", "adfduplexinputcaps", "feeder")):
+    if any(name in names for name in ("adfsimplexinputcaps", "feeder")):
         sources.append("Feeder")
+    if "adfduplexinputcaps" in names:
+        sources.append("FeederDuplex")
     # Alguns equipamentos omitem a seção Platen, embora o vidro esteja disponível.
     return tuple(sources) or ("Platen",)
 
@@ -124,12 +127,17 @@ def _scan_settings(dpi: int, color_mode: str, input_source: str = "Platen") -> b
     color = colors.get(color_mode)
     if color is None:
         raise ESCLScannerError("Modo de cor inválido.")
-    if input_source not in {"Platen", "Feeder"}:
+    if input_source not in {"Platen", "Feeder", "FeederDuplex"}:
         raise ESCLScannerError("Origem de digitalização inválida.")
+    source = "Platen" if input_source == "Platen" else "Feeder"
+    duplex_setting = ""
+    if source == "Feeder":
+        duplex = "true" if input_source == "FeederDuplex" else "false"
+        duplex_setting = f"\n  <scan:Duplex>{duplex}</scan:Duplex>"
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <scan:ScanSettings xmlns:scan="{SCAN_NAMESPACE}" xmlns:pwg="{PWG_NAMESPACE}">
   <pwg:Version>2.0</pwg:Version>
-  <pwg:InputSource>{input_source}</pwg:InputSource>
+  <pwg:InputSource>{source}</pwg:InputSource>{duplex_setting}
   <scan:ColorMode>{color}</scan:ColorMode>
   <scan:XResolution>{dpi}</scan:XResolution>
   <scan:YResolution>{dpi}</scan:YResolution>
@@ -145,14 +153,14 @@ def _job_url(base: str, location: str) -> str:
     return base + parsed.path.rstrip("/")
 
 
-def _acquire_document(
+def _create_scan_job(
     base: str,
     protocol: str,
     dpi: int,
     color_mode: str,
     input_source: str,
     timeout: int,
-) -> tuple[bytes, str]:
+) -> tuple[urllib.request.OpenerDirector, str]:
     request = urllib.request.Request(
         base + SCAN_JOBS_PATH,
         data=_scan_settings(dpi, color_mode, input_source),
@@ -165,17 +173,41 @@ def _acquire_document(
             location = response.headers.get("Location", "")
         if not location:
             raise ESCLScannerError("A multifuncional não informou o endereço do trabalho de digitalização.")
-        document_request = urllib.request.Request(
-            _job_url(base, location) + "/NextDocument",
-            headers={"Accept": "image/jpeg, image/png, image/tiff, application/pdf"},
-            method="GET",
-        )
-        with opener.open(document_request, timeout=timeout) as response:
-            return response.read(), response.headers.get_content_type().lower()
+        return opener, _job_url(base, location)
     except ESCLScannerError:
         raise
     except (OSError, urllib.error.URLError, urllib.error.HTTPError) as exc:
         raise _friendly_network_error(exc) from exc
+
+
+def _next_document(
+    opener: urllib.request.OpenerDirector,
+    job_url: str,
+    timeout: int,
+    *,
+    allow_end: bool = False,
+) -> tuple[bytes, str] | None:
+    request = urllib.request.Request(
+        job_url + "/NextDocument",
+        headers={"Accept": "image/jpeg, image/png, image/tiff, application/pdf"},
+        method="GET",
+    )
+    for attempt in range(6):
+        try:
+            with opener.open(request, timeout=timeout) as response:
+                return response.read(), response.headers.get_content_type().lower()
+        except urllib.error.HTTPError as exc:
+            if allow_end and exc.code in (404, 410):
+                return None
+            if allow_end and exc.code in (409, 503):
+                if attempt < 5:
+                    time.sleep(0.5)
+                    continue
+                return None
+            raise _friendly_network_error(exc) from exc
+        except (OSError, urllib.error.URLError) as exc:
+            raise _friendly_network_error(exc) from exc
+    return None
 
 
 def _document_to_images(data: bytes, content_type: str, destination: Path, page_start: int, dpi: int) -> list[Path]:
@@ -227,13 +259,28 @@ def scan_escl_to_pdf(
         directory = Path(temp)
         images: list[Path] = []
         scanned_pages = 0
-        while True:
-            data, content_type = _acquire_document(base, protocol, dpi, color_mode, input_source, timeout=180)
-            new_images = _document_to_images(data, content_type, directory, scanned_pages + 1, dpi)
-            images.extend(new_images)
-            scanned_pages += len(new_images)
-            if ask_next_page is None or not ask_next_page(scanned_pages):
-                break
+        if input_source in {"Feeder", "FeederDuplex"}:
+            opener, job_url = _create_scan_job(base, protocol, dpi, color_mode, input_source, timeout=180)
+            while scanned_pages < 1000:
+                document = _next_document(opener, job_url, timeout=180, allow_end=True)
+                if document is None:
+                    break
+                data, content_type = document
+                new_images = _document_to_images(data, content_type, directory, scanned_pages + 1, dpi)
+                images.extend(new_images)
+                scanned_pages += len(new_images)
+        else:
+            while True:
+                opener, job_url = _create_scan_job(base, protocol, dpi, color_mode, input_source, timeout=180)
+                document = _next_document(opener, job_url, timeout=180)
+                if document is None:
+                    break
+                data, content_type = document
+                new_images = _document_to_images(data, content_type, directory, scanned_pages + 1, dpi)
+                images.extend(new_images)
+                scanned_pages += len(new_images)
+                if ask_next_page is None or not ask_next_page(scanned_pages):
+                    break
         if not images:
             raise ESCLScannerError("Nenhuma página foi recebida da multifuncional.")
         if use_ocr:

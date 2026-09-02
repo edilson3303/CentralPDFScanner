@@ -80,7 +80,9 @@ def _sources_from_wia_capabilities(capabilities: int) -> tuple[str, ...]:
     if capabilities & 2:  # WIA_DPS_DOCUMENT_HANDLING_CAPABILITIES: FLAT
         sources.append("Vidro")
     if capabilities & 1:  # WIA_DPS_DOCUMENT_HANDLING_CAPABILITIES: FEED
-        sources.append("Alimentador superior")
+        sources.append("Alimentador superior - somente frente")
+        if capabilities & 4:  # DUP
+            sources.append("Alimentador superior - frente e verso")
     return tuple(sources) or ("Vidro",)
 
 
@@ -125,15 +127,20 @@ def scan_to_pdf(
         raise ScannerError("O scanner selecionado não está mais disponível.")
 
     color_codes = {"Cor": 1, "Cinza": 2, "Preto e branco": 4}
-    source_codes = {"Vidro": 2, "Alimentador superior": 1}
+    source_codes = {
+        "Vidro": 2,
+        "Alimentador superior - somente frente": 1,
+        "Alimentador superior - frente e verso": 1 | 4,
+    }
     if input_source not in source_codes:
         raise ScannerError("Origem de digitalização inválida.")
     with tempfile.TemporaryDirectory(prefix="central_pdf_scan_") as temp:
         images: list[Path] = []
         page_number = 1
+        feeder = input_source != "Vidro"
+        device = selected.Connect()
+        _set_property(device, 3088, source_codes[input_source])
         while True:
-            device = selected.Connect()
-            _set_property(device, 3088, source_codes[input_source])
             item = device.Items(1)
             _set_property(item, 6146, color_codes.get(color_mode, 1))
             _set_property(item, 6147, dpi)
@@ -141,13 +148,20 @@ def scan_to_pdf(
             try:
                 image = item.Transfer(WIA_FORMAT_JPEG)
             except Exception as exc:
+                if feeder and images:
+                    break
                 raise ScannerError(
-                    "Não foi possível digitalizar. Confirme se a multifuncional está instalada "
-                    "no Windows como scanner WIA e se está acessível na rede."
+                    "Não foi possível digitalizar. Se escolheu o alimentador, coloque as folhas na bandeja. "
+                    "Confirme também se o scanner WIA está instalado e acessível."
                 ) from exc
             path = Path(temp) / f"scan_{page_number:04d}.jpg"
             image.SaveFile(str(path))
             images.append(path)
+            if feeder:
+                page_number += 1
+                if page_number > 1000:
+                    break
+                continue
             if ask_next_page is None or not ask_next_page(page_number):
                 break
             page_number += 1

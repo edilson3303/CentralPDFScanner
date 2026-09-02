@@ -9,6 +9,8 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 - Digitalizar usando scanners instalados no Windows, inclusive multifuncionais de rede
 - Digitar o IP de uma multifuncional compatível com eSCL/AirScan e digitalizar diretamente
 - Detectar automaticamente e escolher entre o vidro e o alimentador superior, quando disponíveis
+- Digitalizar automaticamente todas as folhas do alimentador em um único PDF
+- Digitalizar frente e verso quando o alimentador da multifuncional oferecer duplex
 - Memorizar o último IP de multifuncional utilizado
 - Escolher na lista scanners de rede, USB ou outros scanners instalados no Windows
 - Escolher digitalização normal ou PDF pesquisável com OCR
@@ -18,6 +20,7 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 - Proteger PDFs com senha e criptografia AES-256
 - Desproteger PDFs mediante a senha correta
 - Digitalizar várias páginas no mesmo documento
+- Abrir as janelas internas centralizadas na tela
 
 ## Usar pelo código-fonte
 
@@ -36,8 +39,10 @@ Depois de extraído, o pacote abre por `CentralPDFScanner.exe` sem instalar Pyth
 
 1. Clique em **Scanner de rede**.
 2. Digite o IP exibido no painel ou na configuração de rede da multifuncional.
-3. Aguarde a detecção automática e escolha **Vidro** ou **Alimentador superior**.
+3. Aguarde a detecção automática e escolha **Vidro**, **Alimentador - somente frente** ou **Alimentador - frente e verso**.
 4. Escolha resolução, cor e OCR e clique em **Continuar**.
+
+Ao escolher o alimentador, coloque todas as folhas na bandeja. O programa digitaliza o lote automaticamente, sem perguntar página por página, e reúne todas as páginas em um único PDF. A opção frente e verso só aparece quando o equipamento informa que possui duplex.
 
 O último IP utilizado fica salvo em `configuracao.json`, dentro da pasta do programa portátil, e será preenchido automaticamente na próxima abertura.
 

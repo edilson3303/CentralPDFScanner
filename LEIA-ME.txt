@@ -1,4 +1,4 @@
-PDF & SCANNER 1.4
+PDF & SCANNER 1.5
 =================
 
 COMO ABRIR A VERSAO PORTATIL
@@ -12,6 +12,8 @@ SCANNER DE REDE
 - Informe o IP mostrado no painel da multifuncional. O programa usa HTTP e porta 80 automaticamente.
 - O programa detecta e permite escolher Vidro ou Alimentador superior, conforme as
   opcoes oferecidas pela multifuncional.
+- No alimentador, todas as folhas sao digitalizadas automaticamente no mesmo PDF.
+- Se o equipamento oferecer duplex, aparece a opcao Alimentador superior - frente e verso.
 - O ultimo IP utilizado fica gravado em configuracao.json na pasta do programa.
 - A digitalizacao direta por IP requer que o aparelho ofereca eSCL/AirScan (Mopria).
 - Se o aparelho nao for compativel, use a opcao "Scanner instalado no Windows"
@@ -45,3 +47,6 @@ CONVERSOES WORD
 
 PRIVACIDADE
 - Todas as operacoes sao locais. Nenhum documento e enviado para a internet.
+
+JANELAS
+- As janelas internas abertas pelos botoes aparecem centralizadas na tela.

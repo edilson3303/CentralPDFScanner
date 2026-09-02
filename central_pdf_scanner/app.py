@@ -9,7 +9,7 @@ import threading
 import traceback
 from pathlib import Path
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 
 from . import __version__
@@ -240,7 +240,9 @@ class CentralApp(tk.Tk):
         source = self._pick_pdf("Escolha o PDF")
         if not source:
             return
-        pages = simpledialog.askstring("Remover páginas", "Páginas a remover (ex.: 2,4-6):", parent=self)
+        dialog = TextInputDialog(self, "Remover páginas", "Páginas a remover (ex.: 2,4-6):")
+        self.wait_window(dialog)
+        pages = dialog.result
         if not pages:
             return
         output = self._save_pdf("Salvar PDF", f"{Path(source).stem}_sem_paginas.pdf")
@@ -287,7 +289,9 @@ class CentralApp(tk.Tk):
         source = self._pick_pdf("Escolha o PDF")
         if not source:
             return
-        dpi = simpledialog.askinteger("PDF para JPG", "Resolução em DPI (72 a 600):", initialvalue=200, minvalue=72, maxvalue=600, parent=self)
+        dialog = IntegerInputDialog(self, "PDF para JPG", "Resolução em DPI (72 a 600):", 200, 72, 600)
+        self.wait_window(dialog)
+        dpi = dialog.result
         if dpi is None:
             return
         folder = filedialog.askdirectory(parent=self, title="Escolha a pasta de destino")
@@ -420,10 +424,10 @@ class CentralApp(tk.Tk):
 class BaseDialog(tk.Toplevel):
     def __init__(self, parent: tk.Misc, title: str) -> None:
         super().__init__(parent)
+        self.withdraw()
         self.title(title)
         self.resizable(False, False)
         self.transient(parent)
-        self.grab_set()
         self.result = None
         self.body = ttk.Frame(self, padding=20)
         self.body.pack(fill="both", expand=True)
@@ -434,6 +438,66 @@ class BaseDialog(tk.Toplevel):
         row.grid(column=0, row=99, columnspan=2, sticky="e", pady=(18, 0))
         ttk.Button(row, text="Cancelar", command=self.destroy).pack(side="right")
         ttk.Button(row, text="Continuar", command=callback).pack(side="right", padx=(0, 8))
+        self.after_idle(self._show_centered)
+
+    def _show_centered(self) -> None:
+        self.update_idletasks()
+        width = self.winfo_reqwidth()
+        height = self.winfo_reqheight()
+        x = max(0, (self.winfo_screenwidth() - width) // 2)
+        y = max(0, (self.winfo_screenheight() - height) // 2)
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.deiconify()
+        self.lift()
+        self.grab_set()
+
+
+class TextInputDialog(BaseDialog):
+    def __init__(self, parent: tk.Misc, title: str, prompt: str) -> None:
+        super().__init__(parent, title)
+        ttk.Label(self.body, text=prompt).grid(row=0, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.entry = ttk.Entry(self.body, width=28)
+        self.entry.grid(row=0, column=1, pady=5)
+        self.entry.focus_set()
+        self.bind("<Return>", lambda _event: self.accept())
+        self.buttons(self.accept)
+
+    def accept(self) -> None:
+        value = self.entry.get().strip()
+        if not value:
+            messagebox.showerror(APP_TITLE, "Preencha o campo.", parent=self)
+            return
+        self.result = value
+        self.destroy()
+
+
+class IntegerInputDialog(BaseDialog):
+    def __init__(self, parent: tk.Misc, title: str, prompt: str, initial: int, minimum: int, maximum: int) -> None:
+        super().__init__(parent, title)
+        self.minimum = minimum
+        self.maximum = maximum
+        ttk.Label(self.body, text=prompt).grid(row=0, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.entry = ttk.Entry(self.body, width=12)
+        self.entry.insert(0, str(initial))
+        self.entry.grid(row=0, column=1, pady=5)
+        self.entry.focus_set()
+        self.bind("<Return>", lambda _event: self.accept())
+        self.buttons(self.accept)
+
+    def accept(self) -> None:
+        try:
+            value = int(self.entry.get().strip())
+            if not self.minimum <= value <= self.maximum:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror(
+                APP_TITLE,
+                f"Digite um número entre {self.minimum} e {self.maximum}.",
+                parent=self,
+            )
+            return
+        self.result = value
+        self.destroy()
 
 
 class CropDialog(BaseDialog):
@@ -567,11 +631,14 @@ class ScanDialog(BaseDialog):
 
 
 class IPScanDialog(BaseDialog):
-    SOURCE_LABELS = {"Platen": "Vidro", "Feeder": "Alimentador superior"}
+    SOURCE_LABELS = {
+        "Platen": "Vidro",
+        "Feeder": "Alimentador superior - somente frente",
+        "FeederDuplex": "Alimentador superior - frente e verso",
+    }
 
     def __init__(self, parent: tk.Misc, ocr_available: bool, last_ip: str = "") -> None:
         super().__init__(parent, "Scanner de rede")
-        self.withdraw()
         self._source_results: queue.Queue[tuple[str, str, object]] = queue.Queue()
         self._detect_after = None
         self._detected_ip = ""
@@ -620,13 +687,6 @@ class IPScanDialog(BaseDialog):
         self.after(100, self._poll_source_results)
         if last_ip:
             self._schedule_detection(delay=150)
-        self.update_idletasks()
-        width = self.winfo_reqwidth()
-        height = self.winfo_reqheight()
-        x = max(0, (self.winfo_screenwidth() - width) // 2)
-        y = max(0, (self.winfo_screenheight() - height) // 2)
-        self.geometry(f"{width}x{height}+{x}+{y}")
-        self.deiconify()
 
     def _schedule_detection(self, _event=None, *, delay: int = 700) -> None:
         if self._detect_after is not None:

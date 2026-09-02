@@ -57,7 +57,7 @@ class FakeESCLHandler(BaseHTTPRequestHandler):
             content = (
                 b'<scan:ScannerCapabilities xmlns:scan="http://schemas.hp.com/imaging/escl/2011/05/03">'
                 b'<scan:Platen><scan:PlatenInputCaps /></scan:Platen>'
-                b'<scan:Adf><scan:AdfSimplexInputCaps /></scan:Adf>'
+                b'<scan:Adf><scan:AdfSimplexInputCaps /><scan:AdfDuplexInputCaps /></scan:Adf>'
                 b'</scan:ScannerCapabilities>'
             )
             self.send_response(200)
@@ -67,6 +67,12 @@ class FakeESCLHandler(BaseHTTPRequestHandler):
             self.wfile.write(content)
             return
         if self.path == "/eSCL/ScanJobs/1/NextDocument":
+            count = getattr(self.server, "documents_sent", 0)  # type: ignore[attr-defined]
+            available = getattr(self.server, "documents_available", 1)  # type: ignore[attr-defined]
+            if count >= available:
+                self.send_error(404)
+                return
+            self.server.documents_sent = count + 1  # type: ignore[attr-defined]
             stream = BytesIO()
             Image.new("RGB", (320, 240), "white").save(stream, "JPEG")
             content = stream.getvalue()
@@ -84,6 +90,7 @@ class FakeESCLHandler(BaseHTTPRequestHandler):
             return
         length = int(self.headers.get("Content-Length", "0"))
         self.server.scan_settings = self.rfile.read(length)  # type: ignore[attr-defined]
+        self.server.documents_sent = 0  # type: ignore[attr-defined]
         self.send_response(201)
         self.send_header("Location", "/eSCL/ScanJobs/1")
         self.send_header("Content-Length", "0")
@@ -164,8 +171,11 @@ class PDFToolsTests(unittest.TestCase):
 
     def test_wia_scanner_source_detection(self) -> None:
         self.assertEqual(_sources_from_wia_capabilities(2), ("Vidro",))
-        self.assertEqual(_sources_from_wia_capabilities(1), ("Alimentador superior",))
-        self.assertEqual(_sources_from_wia_capabilities(3), ("Vidro", "Alimentador superior"))
+        self.assertEqual(_sources_from_wia_capabilities(1), ("Alimentador superior - somente frente",))
+        self.assertEqual(
+            _sources_from_wia_capabilities(7),
+            ("Vidro", "Alimentador superior - somente frente", "Alimentador superior - frente e verso"),
+        )
 
     def test_ip_scanner_settings_validation(self) -> None:
         self.assertEqual(validate_ip_settings("192.168.1.50", 80, "HTTP"), ("192.168.1.50", 80, "http"))
@@ -180,8 +190,9 @@ class PDFToolsTests(unittest.TestCase):
         thread.start()
         try:
             port = server.server_address[1]
+            server.documents_available = 3  # type: ignore[attr-defined]
             self.assertIn("encontrado", probe_escl_scanner("127.0.0.1", port))
-            self.assertEqual(detect_escl_sources("127.0.0.1", port), ("Platen", "Feeder"))
+            self.assertEqual(detect_escl_sources("127.0.0.1", port), ("Platen", "Feeder", "FeederDuplex"))
             output = scan_escl_to_pdf(
                 "127.0.0.1",
                 port,
@@ -189,14 +200,15 @@ class PDFToolsTests(unittest.TestCase):
                 self.root / "scanner_ip.pdf",
                 dpi=300,
                 color_mode="Cor",
-                input_source="Feeder",
+                input_source="FeederDuplex",
             )
             self.assertTrue(output.is_file())
-            self.assertEqual(len(PdfReader(str(output)).pages), 1)
+            self.assertEqual(len(PdfReader(str(output)).pages), 3)
             settings = server.scan_settings  # type: ignore[attr-defined]
             self.assertIn(b"RGB24", settings)
             self.assertIn(b"300", settings)
             self.assertIn(b"Feeder", settings)
+            self.assertIn(b"<scan:Duplex>true</scan:Duplex>", settings)
         finally:
             server.shutdown()
             server.server_close()
