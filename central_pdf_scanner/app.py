@@ -12,6 +12,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from PIL import Image, ImageTk
 
 from . import __version__
+from .escl_scanner import ESCLScannerError, scan_escl_to_pdf, validate_ip_settings
 from .ocr import find_tesseract
 from .pdf_tools import (
     crop_pdf,
@@ -94,8 +95,11 @@ class CentralApp(tk.Tk):
         self._build_section(
             content,
             "Digitalização",
-            [("Escolher scanner e digitalizar / OCR", self.scan)],
-            columns=1,
+            [
+                ("Scanner instalado no Windows", self.scan),
+                ("Scanner por endereço IP", self.scan_by_ip),
+            ],
+            columns=2,
             primary=True,
         ).pack(fill="x", pady=(0, 12))
         self._build_section(
@@ -330,16 +334,6 @@ class CentralApp(tk.Tk):
         if not output:
             return
 
-        def ask_next(page: int) -> bool:
-            event = threading.Event()
-            answer = {"value": False}
-            def prompt() -> None:
-                answer["value"] = messagebox.askyesno(APP_TITLE, f"Página {page} digitalizada.\n\nDeseja digitalizar outra página?", parent=self)
-                event.set()
-            self.after(0, prompt)
-            event.wait()
-            return answer["value"]
-
         self._run(
             "Digitalizando documento...",
             scan_to_pdf,
@@ -350,7 +344,47 @@ class CentralApp(tk.Tk):
             use_ocr=use_ocr,
             language=language,
             app_dir=app_directory(),
-            ask_next_page=ask_next,
+            ask_next_page=self._ask_next_page,
+        )
+
+    def _ask_next_page(self, page: int) -> bool:
+        event = threading.Event()
+        answer = {"value": False}
+
+        def prompt() -> None:
+            answer["value"] = messagebox.askyesno(
+                APP_TITLE,
+                f"Página {page} digitalizada.\n\nDeseja digitalizar outra página?",
+                parent=self,
+            )
+            event.set()
+
+        self.after(0, prompt)
+        event.wait()
+        return answer["value"]
+
+    def scan_by_ip(self) -> None:
+        dialog = IPScanDialog(self, find_tesseract(app_directory()) is not None)
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
+        ip_address, port, protocol, dpi, color, use_ocr, language = dialog.result
+        output = self._save_pdf("Salvar digitalização por IP", "digitalizacao_ip.pdf")
+        if not output:
+            return
+        self._run(
+            f"Conectando ao scanner {ip_address}...",
+            scan_escl_to_pdf,
+            ip_address,
+            port,
+            protocol,
+            output,
+            dpi=dpi,
+            color_mode=color,
+            use_ocr=use_ocr,
+            language=language,
+            app_dir=app_directory(),
+            ask_next_page=self._ask_next_page,
         )
 
 
@@ -485,6 +519,85 @@ class ScanDialog(BaseDialog):
             self.devices[index].device_id,
             int(self.combos[1].get()),
             self.combos[2].get(),
+            bool(self.ocr.get()),
+            self.language.get().strip() or "por+eng",
+        )
+        self.destroy()
+
+
+class IPScanDialog(BaseDialog):
+    def __init__(self, parent: tk.Misc, ocr_available: bool) -> None:
+        super().__init__(parent, "Digitalizar pelo endereço IP")
+        ttk.Label(self.body, text="IP da multifuncional").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.ip_address = ttk.Entry(self.body, width=35)
+        self.ip_address.insert(0, "192.168.1.50")
+        self.ip_address.grid(row=0, column=1, pady=5)
+        self.ip_address.focus_set()
+
+        ttk.Label(self.body, text="Protocolo").grid(row=1, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.protocol = ttk.Combobox(self.body, state="readonly", values=("HTTP", "HTTPS"), width=32)
+        self.protocol.set("HTTP")
+        self.protocol.grid(row=1, column=1, pady=5)
+        self.protocol.bind("<<ComboboxSelected>>", self._protocol_changed)
+
+        ttk.Label(self.body, text="Porta").grid(row=2, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.port = ttk.Entry(self.body, width=35)
+        self.port.insert(0, "80")
+        self.port.grid(row=2, column=1, pady=5)
+
+        ttk.Label(self.body, text="Resolução").grid(row=3, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.dpi = ttk.Combobox(self.body, state="readonly", values=("150", "200", "300", "400", "600"), width=32)
+        self.dpi.set("300")
+        self.dpi.grid(row=3, column=1, pady=5)
+
+        ttk.Label(self.body, text="Modo").grid(row=4, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.color = ttk.Combobox(self.body, state="readonly", values=("Cor", "Cinza", "Preto e branco"), width=32)
+        self.color.set("Cor")
+        self.color.grid(row=4, column=1, pady=5)
+
+        self.ocr = tk.BooleanVar(value=False)
+        ocr_text = "Aplicar OCR (PDF pesquisável)" if ocr_available else "Aplicar OCR (Tesseract não encontrado)"
+        ttk.Checkbutton(
+            self.body,
+            text=ocr_text,
+            variable=self.ocr,
+            state="normal" if ocr_available else "disabled",
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(10, 4))
+
+        ttk.Label(self.body, text="Idioma OCR").grid(row=6, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.language = ttk.Combobox(self.body, values=("por", "por+eng", "eng"), width=32)
+        self.language.set("por+eng")
+        self.language.grid(row=6, column=1, pady=5)
+        ttk.Label(
+            self.body,
+            text="Requer eSCL/AirScan habilitado na multifuncional.\nNormalmente use HTTP e porta 80.",
+            foreground="#476582",
+        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(9, 0))
+        self.bind("<Return>", lambda _event: self.accept())
+        self.buttons(self.accept)
+
+    def _protocol_changed(self, _event=None) -> None:
+        current = self.port.get().strip()
+        if self.protocol.get() == "HTTPS" and current == "80":
+            self.port.delete(0, tk.END)
+            self.port.insert(0, "443")
+        elif self.protocol.get() == "HTTP" and current == "443":
+            self.port.delete(0, tk.END)
+            self.port.insert(0, "80")
+
+    def accept(self) -> None:
+        try:
+            port = int(self.port.get().strip())
+            address, port, protocol = validate_ip_settings(self.ip_address.get(), port, self.protocol.get())
+        except (ValueError, ESCLScannerError) as exc:
+            messagebox.showerror(APP_TITLE, str(exc) or "Informe um IP e uma porta válidos.", parent=self)
+            return
+        self.result = (
+            address,
+            port,
+            protocol,
+            int(self.dpi.get()),
+            self.color.get(),
             bool(self.ocr.get()),
             self.language.get().strip() or "por+eng",
         )

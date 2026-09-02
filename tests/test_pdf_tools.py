@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import tempfile
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import BytesIO
 from pathlib import Path
 
 import fitz
@@ -21,6 +24,12 @@ from central_pdf_scanner.pdf_tools import (
     unprotect_pdf,
 )
 from central_pdf_scanner.scanner import _detect_connection_type
+from central_pdf_scanner.escl_scanner import (
+    ESCLScannerError,
+    probe_escl_scanner,
+    scan_escl_to_pdf,
+    validate_ip_settings,
+)
 from central_pdf_scanner.word_tools import pdf_to_word
 from central_pdf_scanner.ocr import find_tesseract, images_to_searchable_pdf
 from central_pdf_scanner.word_tools import word_to_pdf
@@ -35,6 +44,43 @@ def make_pdf(path: Path, pages: int = 3) -> Path:
     document.save(path)
     document.close()
     return path
+
+
+class FakeESCLHandler(BaseHTTPRequestHandler):
+    def log_message(self, _format, *_args) -> None:
+        pass
+
+    def do_GET(self) -> None:
+        if self.path == "/eSCL/ScannerCapabilities":
+            content = b'<scan:ScannerCapabilities xmlns:scan="http://schemas.hp.com/imaging/escl/2011/05/03" />'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/xml")
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+            return
+        if self.path == "/eSCL/ScanJobs/1/NextDocument":
+            stream = BytesIO()
+            Image.new("RGB", (320, 240), "white").save(stream, "JPEG")
+            content = stream.getvalue()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+            return
+        self.send_error(404)
+
+    def do_POST(self) -> None:
+        if self.path != "/eSCL/ScanJobs":
+            self.send_error(404)
+            return
+        length = int(self.headers.get("Content-Length", "0"))
+        self.server.scan_settings = self.rfile.read(length)  # type: ignore[attr-defined]
+        self.send_response(201)
+        self.send_header("Location", "/eSCL/ScanJobs/1")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
 
 class PDFToolsTests(unittest.TestCase):
@@ -108,6 +154,37 @@ class PDFToolsTests(unittest.TestCase):
         self.assertEqual(_detect_connection_type(r"USBSCAN\\VID_1234"), "USB / conectado")
         self.assertEqual(_detect_connection_type("SWD DAFWSDProvider WSD Scanner"), "Rede")
         self.assertEqual(_detect_connection_type("Scanner virtual"), "Instalado no Windows")
+
+    def test_ip_scanner_settings_validation(self) -> None:
+        self.assertEqual(validate_ip_settings("192.168.1.50", 80, "HTTP"), ("192.168.1.50", 80, "http"))
+        with self.assertRaises(ESCLScannerError):
+            validate_ip_settings("impressora.local", 80, "http")
+        with self.assertRaises(ESCLScannerError):
+            validate_ip_settings("192.168.1.50", 70000, "http")
+
+    def test_escl_probe_and_scan_to_pdf(self) -> None:
+        server = ThreadingHTTPServer(("127.0.0.1", 0), FakeESCLHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = server.server_address[1]
+            self.assertIn("encontrado", probe_escl_scanner("127.0.0.1", port))
+            output = scan_escl_to_pdf(
+                "127.0.0.1",
+                port,
+                "http",
+                self.root / "scanner_ip.pdf",
+                dpi=300,
+                color_mode="Cor",
+            )
+            self.assertTrue(output.is_file())
+            self.assertEqual(len(PdfReader(str(output)).pages), 1)
+            settings = server.scan_settings  # type: ignore[attr-defined]
+            self.assertIn(b"RGB24", settings)
+            self.assertIn(b"300", settings)
+        finally:
+            server.shutdown()
+            server.server_close()
 
     def test_ocr_searchable_pdf_when_available(self) -> None:
         if find_tesseract() is None:
