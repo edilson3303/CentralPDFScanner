@@ -131,6 +131,7 @@ class CentralApp(tk.Tk):
         title_block.pack(side="right", anchor="e", padx=(24, 0))
         ttk.Label(title_block, text=APP_TITLE, style="Header.TLabel").pack(anchor="e")
         ttk.Label(title_block, text="Digitalização, edição e conversão de documentos", style="Subtitle.TLabel").pack(anchor="e", pady=(3, 0))
+        ttk.Label(title_block, text=f"Versão {__version__}", style="Subtitle.TLabel").pack(anchor="e", pady=(2, 0))
         tk.Frame(self, bg="#2f65ad", height=4).pack(fill="x")
 
         content = ttk.Frame(self, padding=(24, 18))
@@ -197,8 +198,8 @@ class CentralApp(tk.Tk):
                 row=index // columns,
                 column=index % columns,
                 sticky="nsew",
-                padx=5,
-                pady=5,
+                padx=16 if primary else 5,
+                pady=8 if primary else 5,
             )
         return section
 
