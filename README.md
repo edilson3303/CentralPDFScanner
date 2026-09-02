@@ -1,6 +1,6 @@
 # PDF & Scanner
 
-Versão atual: 2.0.2
+Versão atual: 2.0.3
 
 Aplicativo desktop portátil para Windows 10/11, em português, que reúne digitalização WIA ou diretamente por IP, OCR e ferramentas de PDF, Word e imagem. Todo o processamento é local.
 

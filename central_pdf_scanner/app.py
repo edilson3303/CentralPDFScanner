@@ -156,7 +156,7 @@ class CentralApp(tk.Tk):
                 ("Girar páginas", self.rotate),
                 ("Dividir PDF", self.divide),
                 ("Desproteger PDF", self.unprotect),
-                ("Cortar superior/inferior", self.trim),
+                ("Cortar PDF", self.trim),
             ],
             columns=3,
         ).pack(fill="x", pady=(0, 12))
@@ -178,7 +178,7 @@ class CentralApp(tk.Tk):
         ttk.Button(footer, text="Licença", command=self.show_license).pack(side="left", padx=(0, 8))
         self.progress = ttk.Progressbar(footer, mode="indeterminate", length=150)
         self.progress.pack(side="right", padx=(10, 0))
-        self.status = ttk.Label(footer, text="Pronto. Seus arquivos permanecem no computador.", style="Status.TLabel")
+        self.status = ttk.Label(footer, text="Pronto.", style="Status.TLabel")
         self.status.pack(side="left", fill="x", expand=True)
 
     def _build_section(self, parent, title: str, actions, *, columns: int, primary: bool = False):
