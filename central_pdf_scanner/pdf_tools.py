@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import secrets
 import shutil
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -94,18 +95,50 @@ def merge_pdf_pages(page_refs: Sequence[tuple[str | Path, int]], output_pdf: str
 
 
 def split_pdf(input_pdf: str | Path, output_dir: str | Path, page_spec: str = "") -> list[Path]:
-    """Cria um PDF separado para cada pagina selecionada."""
+    """Cria um PDF para cada intervalo, como ``1-3,4-6,7-10``."""
     source = _ensure_pdf(input_pdf)
     reader = PdfReader(str(source))
-    selected = parse_page_spec(page_spec, len(reader.pages), allow_empty=True)
+    intervals = parse_split_intervals(page_spec, len(reader.pages))
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
     outputs: list[Path] = []
-    for index in selected:
+    for selected in intervals:
         writer = PdfWriter()
-        writer.add_page(reader.pages[index])
-        outputs.append(_write_pdf(writer, destination / f"{source.stem}_pagina_{index + 1:03d}.pdf"))
+        for index in selected:
+            writer.add_page(reader.pages[index])
+        first, last = selected[0] + 1, selected[-1] + 1
+        suffix = f"pagina_{first:03d}" if first == last else f"paginas_{first:03d}-{last:03d}"
+        outputs.append(_write_pdf(writer, destination / f"{source.stem}_{suffix}.pdf"))
     return outputs
+
+
+def parse_split_intervals(spec: str, page_count: int) -> list[list[int]]:
+    """Converte intervalos separados por virgula em grupos de indices baseados em zero."""
+    if page_count < 1:
+        raise PDFToolError("O PDF não contém páginas.")
+    text = spec.strip().replace(" ", "")
+    if not text:
+        raise PDFToolError("Informe ao menos um intervalo, por exemplo: 1-3,4-6.")
+    groups: list[list[int]] = []
+    used: set[int] = set()
+    for part in text.split(","):
+        if re.fullmatch(r"\d+", part):
+            start = end = int(part)
+        elif re.fullmatch(r"\d+-\d+", part):
+            start, end = (int(value) for value in part.split("-", 1))
+        else:
+            raise PDFToolError(f"Intervalo inválido: {part or '(vazio)'}")
+        if start > end:
+            raise PDFToolError(f"Intervalo invertido: {part}")
+        if start < 1 or end > page_count:
+            raise PDFToolError(f"O intervalo {part} excede o total de {page_count} páginas.")
+        group = list(range(start - 1, end))
+        overlap = used.intersection(group)
+        if overlap:
+            raise PDFToolError(f"Há páginas repetidas no intervalo {part}.")
+        used.update(group)
+        groups.append(group)
+    return groups
 
 
 def trim_vertical_pdf(
@@ -241,13 +274,19 @@ def save_images_as_jpg(
 def protect_pdf(
     input_pdf: str | Path,
     output_pdf: str | Path,
-    password: str,
+    open_password: str = "",
+    owner_password: str = "",
+    restrict_editing: bool = False,
 ) -> Path:
-    """Restringe edicao com AES-256; o PDF continua abrindo sem senha."""
-    if not password:
-        raise PDFToolError("A senha não pode ficar vazia.")
-    if len(password) < 4:
-        raise PDFToolError("Use uma senha com pelo menos 4 caracteres.")
+    """Protege a abertura e/ou bloqueia edicao, selecao e copia com AES-256."""
+    if not open_password and not restrict_editing:
+        raise PDFToolError("Escolha proteção de abertura e/ou de edição.")
+    if open_password and len(open_password) < 4:
+        raise PDFToolError("Use uma senha de abertura com pelo menos 4 caracteres.")
+    if restrict_editing and len(owner_password) < 4:
+        raise PDFToolError("Use uma senha de proprietário com pelo menos 4 caracteres.")
+    if restrict_editing and open_password == owner_password:
+        raise PDFToolError("As senhas de abertura e de proprietário devem ser diferentes.")
     reader = PdfReader(str(_ensure_pdf(input_pdf)))
     if reader.is_encrypted:
         raise PDFToolError("Este PDF já está protegido. Desproteja-o antes de criar uma nova senha.")
@@ -255,14 +294,13 @@ def protect_pdf(
     writer.clone_document_from_reader(reader)
     try:
         permissions = (
-            UserAccessPermissions.PRINT
-            | UserAccessPermissions.PRINT_TO_REPRESENTATION
-            | UserAccessPermissions.EXTRACT
-            | UserAccessPermissions.EXTRACT_TEXT_AND_GRAPHICS
+            UserAccessPermissions.PRINT | UserAccessPermissions.PRINT_TO_REPRESENTATION
+            if restrict_editing
+            else UserAccessPermissions.all()
         )
         writer.encrypt(
-            user_password="",
-            owner_password=password,
+            user_password=open_password,
+            owner_password=owner_password or secrets.token_urlsafe(32),
             permissions_flag=permissions,
             algorithm="AES-256",
         )

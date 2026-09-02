@@ -60,6 +60,8 @@ class PageSelectionDialog(ThumbnailDialog):
         header = ttk.Frame(self, padding=(16, 12))
         header.pack(fill="x")
         prompt = "Clique nas paginas desejadas. Clique novamente para desmarcar."
+        if mode == "divide":
+            prompt = "Use as miniaturas como referência e informe os intervalos que formarão arquivos separados."
         ttk.Label(header, text=prompt, font=("Segoe UI", 10, "bold")).pack(side="left")
         self.summary = ttk.Label(header, text="0 selecionada(s)")
         self.summary.pack(side="right")
@@ -68,6 +70,12 @@ class PageSelectionDialog(ThumbnailDialog):
         controls.pack(fill="x")
         ttk.Button(controls, text="Selecionar todas", command=self.select_all).pack(side="left")
         ttk.Button(controls, text="Limpar", command=self.clear).pack(side="left", padx=6)
+        if mode == "divide":
+            ttk.Label(controls, text="Intervalos:").pack(side="left", padx=(18, 5))
+            self.intervals = ttk.Entry(controls, width=30)
+            self.intervals.insert(0, f"1-{len(self.document)}")
+            self.intervals.pack(side="left")
+            ttk.Label(controls, text="Ex.: 1-3,4-6,7-10").pack(side="left", padx=(8, 0))
         if mode == "rotate":
             ttk.Label(controls, text="Rotacao:").pack(side="left", padx=(18, 5))
             self.degrees = ttk.Combobox(controls, state="readonly", values=("90", "180", "270"), width=8)
@@ -144,6 +152,14 @@ class PageSelectionDialog(ThumbnailDialog):
         self.summary.configure(text="0 selecionada(s)")
 
     def accept(self) -> None:
+        if self.mode == "divide":
+            value = self.intervals.get().strip()
+            if not value:
+                messagebox.showerror("PDF & Scanner", "Informe os intervalos, por exemplo: 1-3,4-6.", parent=self)
+                return
+            self.result = value
+            self.close(keep_result=True)
+            return
         if not self.selected:
             messagebox.showerror("PDF & Scanner", "Selecione ao menos uma pagina.", parent=self)
             return
@@ -200,14 +216,19 @@ class MergePagesDialog(ThumbnailDialog):
 
         container = ttk.Frame(self)
         container.pack(fill="both", expand=True, padx=16)
+        container.rowconfigure(0, weight=1)
+        container.columnconfigure(0, weight=1)
         self.canvas = tk.Canvas(container, bg="#eef3f8", highlightthickness=0)
-        scroll = ttk.Scrollbar(container, orient="vertical", command=self.canvas.yview)
+        vertical = ttk.Scrollbar(container, orient="vertical", command=self.canvas.yview)
+        horizontal = ttk.Scrollbar(container, orient="horizontal", command=self.canvas.xview)
         self.grid = tk.Frame(self.canvas, bg="#eef3f8")
         self.grid.bind("<Configure>", lambda _e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.create_window((0, 0), window=self.grid, anchor="nw")
-        self.canvas.configure(yscrollcommand=scroll.set)
-        self.canvas.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
+        self.canvas.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        vertical.grid(row=0, column=1, sticky="ns")
+        horizontal.grid(row=1, column=0, sticky="ew")
+        self.canvas.bind("<Shift-MouseWheel>", lambda e: self.canvas.xview_scroll(int(-e.delta / 120), "units"))
         self.buttons: list[tk.Button] = []
         self.redraw()
 
@@ -215,7 +236,7 @@ class MergePagesDialog(ThumbnailDialog):
         footer.pack(fill="x")
         ttk.Button(footer, text="Cancelar", command=self.destroy).pack(side="right")
         ttk.Button(footer, text="Juntar", command=self.accept).pack(side="right", padx=8)
-        self.after_idle(self.show_centered)
+        self.after_idle(lambda: self.show_centered(1120, 620))
 
     def redraw(self) -> None:
         for widget in self.grid.winfo_children():
@@ -235,7 +256,7 @@ class MergePagesDialog(ThumbnailDialog):
                 pady=5,
                 command=lambda value=position: self.choose(value),
             )
-            button.grid(row=position // 6, column=position % 6, padx=7, pady=7)
+            button.grid(row=0, column=position, padx=7, pady=7, sticky="n")
             self.buttons.append(button)
 
     def choose(self, position: int) -> None:

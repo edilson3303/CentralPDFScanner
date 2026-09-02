@@ -19,6 +19,7 @@ from central_pdf_scanner.pdf_tools import (
     merge_pdfs,
     merge_pdf_pages,
     parse_page_spec,
+    parse_split_intervals,
     pdf_to_jpg,
     protect_pdf,
     remove_pages,
@@ -123,6 +124,11 @@ class PDFToolsTests(unittest.TestCase):
         with self.assertRaises(PDFToolError):
             parse_page_spec("4-2", 5)
 
+    def test_parse_split_intervals(self) -> None:
+        self.assertEqual(parse_split_intervals("1-2,3,4-5", 5), [[0, 1], [2], [3, 4]])
+        with self.assertRaises(PDFToolError):
+            parse_split_intervals("1-3,3-5", 5)
+
     def test_remove_pages(self) -> None:
         output = remove_pages(self.source, self.root / "removido.pdf", "2")
         self.assertEqual(len(PdfReader(str(output)).pages), 2)
@@ -151,8 +157,9 @@ class PDFToolsTests(unittest.TestCase):
         self.assertEqual(float(pages[1].cropbox.height), 842)
 
     def test_split_and_merge_selected_pages(self) -> None:
-        outputs = split_pdf(self.source, self.root / "dividido", "1,3")
+        outputs = split_pdf(self.source, self.root / "dividido", "1-2,3")
         self.assertEqual(len(outputs), 2)
+        self.assertEqual(len(PdfReader(str(outputs[0])).pages), 2)
         joined = merge_pdf_pages([(self.source, 2), (self.source, 0)], self.root / "reordenado.pdf")
         reader = PdfReader(str(joined))
         self.assertIn("3", reader.pages[0].extract_text())
@@ -172,19 +179,21 @@ class PDFToolsTests(unittest.TestCase):
         self.assertGreater(output.stat().st_size, 0)
 
     def test_protect_and_unprotect_pdf(self) -> None:
-        protected = protect_pdf(self.source, self.root / "protegido.pdf", "Senha123")
+        protected = protect_pdf(self.source, self.root / "protegido.pdf", "Abrir123", "Dono123", True)
         encrypted_reader = PdfReader(str(protected))
         self.assertTrue(encrypted_reader.is_encrypted)
-        self.assertEqual(int(encrypted_reader.decrypt("")), 1)
+        self.assertEqual(int(encrypted_reader.decrypt("Abrir123")), 1)
         self.assertEqual(len(encrypted_reader.pages), 3)
         permissions = encrypted_reader.user_access_permissions
         self.assertFalse(bool(permissions & UserAccessPermissions.MODIFY))
         self.assertFalse(bool(permissions & UserAccessPermissions.ADD_OR_MODIFY))
+        self.assertFalse(bool(permissions & UserAccessPermissions.EXTRACT))
+        self.assertFalse(bool(permissions & UserAccessPermissions.EXTRACT_TEXT_AND_GRAPHICS))
 
         encrypted_reader = PdfReader(str(protected))
-        self.assertEqual(int(encrypted_reader.decrypt("Senha123")), 2)
+        self.assertEqual(int(encrypted_reader.decrypt("Dono123")), 2)
 
-        unprotected = unprotect_pdf(protected, self.root / "sem_senha.pdf", "Senha123")
+        unprotected = unprotect_pdf(protected, self.root / "sem_senha.pdf", "Dono123")
         open_reader = PdfReader(str(unprotected))
         self.assertFalse(open_reader.is_encrypted)
         self.assertEqual(len(open_reader.pages), 3)

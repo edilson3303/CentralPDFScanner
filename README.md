@@ -1,6 +1,6 @@
 # PDF & Scanner
 
-Versão atual: 2.0.3
+Versão atual: 2.1.0
 
 Aplicativo desktop portátil para Windows 10/11, em português, que reúne digitalização WIA ou diretamente por IP, OCR e ferramentas de PDF, Word e imagem. Todo o processamento é local.
 
@@ -21,8 +21,9 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 - Cortar margens superior e inferior em centímetros
 - Converter PDF para Word e Word para PDF
 - Converter PDF para JPG e JPG/PNG/TIFF/BMP para PDF
-- Proteger PDFs contra edição com senha de proprietário e criptografia AES-256
+- Proteger a abertura do PDF e/ou bloquear edição, seleção e cópia com AES-256
 - Desproteger PDFs mediante a senha correta
+- Dividir PDFs por intervalos, gerando um arquivo para cada grupo informado
 - Digitalizar várias páginas no mesmo documento
 - Converter PDF digitalizado em PDF pesquisável por OCR
 - Abrir as janelas internas centralizadas na tela

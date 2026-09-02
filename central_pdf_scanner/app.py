@@ -388,13 +388,22 @@ class CentralApp(tk.Tk):
         source = self._pick_pdf("Escolha o PDF que será protegido")
         if not source:
             return
-        dialog = PasswordDialog(self, "Proteger PDF", confirm=True)
+        dialog = ProtectOptionsDialog(self)
         self.wait_window(dialog)
         if dialog.result is None:
             return
         output = self._save_pdf("Salvar PDF protegido", f"{Path(source).stem}_protegido.pdf")
         if output:
-            self._run("Protegendo PDF com AES-256...", protect_pdf, source, output, dialog.result)
+            open_password, owner_password, restrict_editing = dialog.result
+            self._run(
+                "Protegendo PDF com AES-256...",
+                protect_pdf,
+                source,
+                output,
+                open_password,
+                owner_password,
+                restrict_editing,
+            )
 
     def unprotect(self) -> None:
         source = self._pick_pdf("Escolha o PDF protegido")
@@ -651,6 +660,74 @@ class PasswordDialog(BaseDialog):
                 messagebox.showerror(APP_TITLE, "As senhas não coincidem.", parent=self)
                 return
         self.result = password
+        self.destroy()
+
+
+class ProtectOptionsDialog(BaseDialog):
+    def __init__(self, parent: tk.Misc) -> None:
+        super().__init__(parent, "Proteger PDF")
+        self.require_opening = tk.BooleanVar(value=True)
+        self.restrict_editing = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            self.body,
+            text="Exigir senha para abrir o PDF",
+            variable=self.require_opening,
+            command=self.update_fields,
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 7))
+        ttk.Label(self.body, text="Senha de abertura").grid(row=1, column=0, sticky="w", padx=(0, 12), pady=4)
+        self.open_password = ttk.Entry(self.body, width=34, show="•")
+        self.open_password.grid(row=1, column=1, pady=4)
+        ttk.Label(self.body, text="Confirmar abertura").grid(row=2, column=0, sticky="w", padx=(0, 12), pady=4)
+        self.open_confirmation = ttk.Entry(self.body, width=34, show="•")
+        self.open_confirmation.grid(row=2, column=1, pady=4)
+
+        ttk.Separator(self.body).grid(row=3, column=0, columnspan=2, sticky="ew", pady=10)
+        ttk.Checkbutton(
+            self.body,
+            text="Bloquear edição, seleção e cópia",
+            variable=self.restrict_editing,
+            command=self.update_fields,
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(0, 7))
+        ttk.Label(self.body, text="Senha de proprietário").grid(row=5, column=0, sticky="w", padx=(0, 12), pady=4)
+        self.owner_password = ttk.Entry(self.body, width=34, show="•")
+        self.owner_password.grid(row=5, column=1, pady=4)
+        ttk.Label(self.body, text="Confirmar proprietário").grid(row=6, column=0, sticky="w", padx=(0, 12), pady=4)
+        self.owner_confirmation = ttk.Entry(self.body, width=34, show="•")
+        self.owner_confirmation.grid(row=6, column=1, pady=4)
+        ttk.Label(
+            self.body,
+            text="As opções são independentes. Se marcar as duas, use senhas diferentes.",
+        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        self.open_password.focus_set()
+        self.bind("<Return>", lambda _event: self.accept())
+        self.buttons(self.accept)
+
+    def update_fields(self) -> None:
+        opening_state = "normal" if self.require_opening.get() else "disabled"
+        editing_state = "normal" if self.restrict_editing.get() else "disabled"
+        self.open_password.configure(state=opening_state)
+        self.open_confirmation.configure(state=opening_state)
+        self.owner_password.configure(state=editing_state)
+        self.owner_confirmation.configure(state=editing_state)
+
+    def accept(self) -> None:
+        opening = self.require_opening.get()
+        editing = self.restrict_editing.get()
+        if not opening and not editing:
+            messagebox.showerror(APP_TITLE, "Escolha ao menos uma forma de proteção.", parent=self)
+            return
+        open_password = self.open_password.get() if opening else ""
+        owner_password = self.owner_password.get() if editing else ""
+        if opening and (len(open_password) < 4 or open_password != self.open_confirmation.get()):
+            messagebox.showerror(APP_TITLE, "Confira a senha de abertura (mínimo de 4 caracteres).", parent=self)
+            return
+        if editing and (len(owner_password) < 4 or owner_password != self.owner_confirmation.get()):
+            messagebox.showerror(APP_TITLE, "Confira a senha de proprietário (mínimo de 4 caracteres).", parent=self)
+            return
+        if opening and editing and open_password == owner_password:
+            messagebox.showerror(APP_TITLE, "Use senhas diferentes para abertura e proprietário.", parent=self)
+            return
+        self.result = (open_password, owner_password, editing)
         self.destroy()
 
 

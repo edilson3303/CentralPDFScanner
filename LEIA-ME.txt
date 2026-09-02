@@ -1,4 +1,4 @@
-PDF & SCANNER 2.0.3
+PDF & SCANNER 2.1.0
 =================
 
 COMO ABRIR A VERSAO PORTATIL
@@ -29,9 +29,10 @@ SCANNER DE REDE
   USB/conectado ou Instalado no Windows. Voce pode escolher o scanner desejado.
 
 PROTEGER E DESPROTEGER PDF
-- Proteger PDF usa AES-256 e uma senha de proprietario para impedir edicao.
-- O documento continua abrindo sem senha; a senha e exigida para retirar a restricao.
-- Desproteger PDF exige a senha de proprietario correta do documento.
+- Proteger PDF permite exigir senha para abrir e/ou impedir edicao, selecao e copia.
+- As duas protecoes sao independentes e podem ser marcadas ao mesmo tempo.
+- Ao usar as duas, a senha de abertura e a senha de proprietario devem ser diferentes.
+- Desproteger PDF aceita uma senha valida e remove todas as protecoes.
 - Guarde a senha em local seguro: o programa nao possui mecanismo para recupera-la.
 
 OCR
@@ -49,6 +50,8 @@ CONVERSOES WORD
 
 EDICAO VISUAL
 - Remover, juntar, dividir, girar e cortar margens exibem miniaturas das paginas.
+- Em Dividir PDF, informe grupos como 1-3,4-6,7-10; cada intervalo gera um arquivo.
+- Em Juntar PDFs, as paginas aparecem em uma faixa com rolagem horizontal.
 - O corte superior/inferior e informado em centimetros.
 
 NOME E FORMATO DA DIGITALIZACAO
