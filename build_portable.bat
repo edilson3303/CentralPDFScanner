@@ -22,7 +22,7 @@ if exist build rmdir /s /q build
 if exist "dist\CentralPDFScanner" rmdir /s /q "dist\CentralPDFScanner"
 if exist "%APP_DIST%" rmdir /s /q "%APP_DIST%"
 
-"%APP_VENV%\Scripts\pyinstaller.exe" --noconfirm --clean --windowed --name CentralPDFScanner --collect-all fitz --collect-all pypdf --hidden-import win32com.client app.py
+"%APP_VENV%\Scripts\pyinstaller.exe" --noconfirm --clean --windowed --name CentralPDFScanner --add-data "assets\logo_assembleia_legislativa_amapa.png;assets" --collect-all fitz --collect-all pypdf --hidden-import win32com.client app.py
 if errorlevel 1 goto :error
 
 ren "dist\CentralPDFScanner" CentralPDFScanner_Portable
@@ -52,4 +52,3 @@ echo.
 echo ERRO: nao foi possivel gerar o pacote portatil.
 pause
 exit /b 1
-

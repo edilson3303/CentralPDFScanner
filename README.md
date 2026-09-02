@@ -1,6 +1,8 @@
-# Central PDF & Scanner
+# PDF & Scanner
 
 Aplicativo desktop portátil para Windows 10/11, em português, que reúne scanner WIA de rede, OCR e ferramentas de PDF, Word e imagem. Todo o processamento é local.
+
+A interface utiliza a identidade visual da Assembleia Legislativa do Estado do Amapá e organiza as ferramentas em Digitalização, Edição de PDF e Conversões.
 
 ## Funções
 

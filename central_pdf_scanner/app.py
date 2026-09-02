@@ -9,6 +9,7 @@ import traceback
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
+from PIL import Image, ImageTk
 
 from . import __version__
 from .ocr import find_tesseract
@@ -26,7 +27,7 @@ from .scanner import list_scanners, scan_to_pdf
 from .word_tools import pdf_to_word, word_to_pdf
 
 
-APP_TITLE = "Central PDF & Scanner"
+APP_TITLE = "PDF & Scanner"
 PDF_TYPES = [("Arquivo PDF", "*.pdf")]
 WORD_TYPES = [("Documento Word", "*.docx")]
 IMAGE_TYPES = [("Imagens", "*.jpg *.jpeg *.png *.bmp *.tif *.tiff")]
@@ -38,12 +39,18 @@ def app_directory() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def resource_path(relative: str) -> Path:
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / relative  # type: ignore[attr-defined]
+    return app_directory() / relative
+
+
 class CentralApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title(f"{APP_TITLE} {__version__}")
-        self.geometry("980x760")
-        self.minsize(780, 650)
+        self.geometry("1040x780")
+        self.minsize(820, 680)
         self.configure(bg="#f4f7fb")
         self._results: queue.Queue[tuple[str, object]] = queue.Queue()
         self._busy = False
@@ -59,48 +66,62 @@ class CentralApp(tk.Tk):
             pass
         style.configure("TFrame", background="#f4f7fb")
         style.configure("Header.TFrame", background="#173b67")
-        style.configure("Header.TLabel", background="#173b67", foreground="white", font=("Segoe UI", 22, "bold"))
-        style.configure("Subtitle.TLabel", background="#173b67", foreground="#dbeafe", font=("Segoe UI", 10))
-        style.configure("Card.TButton", font=("Segoe UI", 11, "bold"), padding=(16, 18))
+        style.configure("Header.TLabel", background="white", foreground="#173b67", font=("Segoe UI", 23, "bold"))
+        style.configure("Subtitle.TLabel", background="white", foreground="#476582", font=("Segoe UI", 10))
+        style.configure("Card.TButton", font=("Segoe UI", 10, "bold"), padding=(13, 13))
+        style.configure("Primary.Card.TButton", font=("Segoe UI", 11, "bold"), padding=(14, 16))
+        style.configure("Section.TLabelframe", background="#f4f7fb", borderwidth=1, relief="solid")
+        style.configure("Section.TLabelframe.Label", background="#f4f7fb", foreground="#173b67", font=("Segoe UI", 12, "bold"))
         style.configure("Status.TLabel", background="#e8eef6", foreground="#173b67", padding=(12, 9))
 
     def _build_ui(self) -> None:
-        header = ttk.Frame(self, style="Header.TFrame", padding=(28, 22))
+        header = tk.Frame(self, bg="white", padx=26, pady=15, highlightthickness=0)
         header.pack(fill="x")
-        ttk.Label(header, text=APP_TITLE, style="Header.TLabel").pack(anchor="w")
-        ttk.Label(
-            header,
-            text="Digitalização, OCR e conversões locais em um só lugar",
-            style="Subtitle.TLabel",
-        ).pack(anchor="w", pady=(3, 0))
+        logo_path = resource_path("assets/logo_assembleia_legislativa_amapa.png")
+        if logo_path.is_file():
+            logo = Image.open(logo_path)
+            logo.thumbnail((360, 85), Image.Resampling.LANCZOS)
+            self._logo_photo = ImageTk.PhotoImage(logo)
+            tk.Label(header, image=self._logo_photo, bg="white", bd=0).pack(side="left", anchor="w")
+        title_block = tk.Frame(header, bg="white")
+        title_block.pack(side="right", anchor="e", padx=(24, 0))
+        ttk.Label(title_block, text=APP_TITLE, style="Header.TLabel").pack(anchor="e")
+        ttk.Label(title_block, text="Digitalização, edição e conversão de documentos", style="Subtitle.TLabel").pack(anchor="e", pady=(3, 0))
+        tk.Frame(self, bg="#2f65ad", height=4).pack(fill="x")
 
-        content = ttk.Frame(self, padding=(26, 24))
+        content = ttk.Frame(self, padding=(24, 18))
         content.pack(fill="both", expand=True)
-        ttk.Label(content, text="Escolha uma ferramenta", font=("Segoe UI", 15, "bold"), background="#f4f7fb").pack(anchor="w", pady=(0, 16))
-
-        grid = ttk.Frame(content)
-        grid.pack(fill="both", expand=True)
-        for column in range(3):
-            grid.columnconfigure(column, weight=1, uniform="cards")
-        for row in range(4):
-            grid.rowconfigure(row, weight=1, uniform="cards")
-
-        actions = [
-            ("Digitalizar / OCR", self.scan),
-            ("Remover páginas", self.remove),
-            ("Juntar PDFs", self.merge),
-            ("Cortar PDF", self.crop),
-            ("PDF para Word", self.to_word),
-            ("Word para PDF", self.from_word),
-            ("PDF para JPG", self.to_jpg),
-            ("JPG para PDF", self.from_images),
-            ("Girar páginas", self.rotate),
-            ("Proteger PDF", self.protect),
-            ("Desproteger PDF", self.unprotect),
-        ]
-        for index, (label, command) in enumerate(actions):
-            button = ttk.Button(grid, text=label, command=command, style="Card.TButton")
-            button.grid(row=index // 3, column=index % 3, sticky="nsew", padx=7, pady=7)
+        self._build_section(
+            content,
+            "Digitalização",
+            [("Escolher scanner e digitalizar / OCR", self.scan)],
+            columns=1,
+            primary=True,
+        ).pack(fill="x", pady=(0, 12))
+        self._build_section(
+            content,
+            "Edição de PDF",
+            [
+                ("Remover páginas", self.remove),
+                ("Juntar PDFs", self.merge),
+                ("Cortar PDF", self.crop),
+                ("Girar páginas", self.rotate),
+                ("Proteger PDF", self.protect),
+                ("Desproteger PDF", self.unprotect),
+            ],
+            columns=3,
+        ).pack(fill="x", pady=(0, 12))
+        self._build_section(
+            content,
+            "Conversões",
+            [
+                ("PDF para Word", self.to_word),
+                ("Word para PDF", self.from_word),
+                ("PDF para JPG", self.to_jpg),
+                ("Imagens para PDF", self.from_images),
+            ],
+            columns=4,
+        ).pack(fill="x")
 
         footer = ttk.Frame(self, padding=(20, 0, 20, 18))
         footer.pack(fill="x")
@@ -108,6 +129,21 @@ class CentralApp(tk.Tk):
         self.progress.pack(side="right", padx=(10, 0))
         self.status = ttk.Label(footer, text="Pronto. Seus arquivos permanecem no computador.", style="Status.TLabel")
         self.status.pack(side="left", fill="x", expand=True)
+
+    def _build_section(self, parent, title: str, actions, *, columns: int, primary: bool = False):
+        section = ttk.LabelFrame(parent, text=f"  {title}  ", style="Section.TLabelframe", padding=(12, 10))
+        for column in range(columns):
+            section.columnconfigure(column, weight=1, uniform=f"{title}-buttons")
+        button_style = "Primary.Card.TButton" if primary else "Card.TButton"
+        for index, (label, command) in enumerate(actions):
+            ttk.Button(section, text=label, command=command, style=button_style).grid(
+                row=index // columns,
+                column=index % columns,
+                sticky="nsew",
+                padx=5,
+                pady=5,
+            )
+        return section
 
     def _pick_pdf(self, title: str) -> str:
         return filedialog.askopenfilename(parent=self, title=title, filetypes=PDF_TYPES)

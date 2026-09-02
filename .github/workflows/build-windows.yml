@@ -31,7 +31,7 @@ jobs:
           Invoke-WebRequest -Uri "https://github.com/tesseract-ocr/tessdata_fast/raw/main/por.traineddata" -OutFile "$tessdata\por.traineddata"
       - name: Gerar executavel
         run: |
-          pyinstaller --noconfirm --clean --windowed --name CentralPDFScanner --collect-all fitz --collect-all pypdf --hidden-import win32com.client app.py
+          pyinstaller --noconfirm --clean --windowed --name CentralPDFScanner --add-data "assets\logo_assembleia_legislativa_amapa.png;assets" --collect-all fitz --collect-all pypdf --hidden-import win32com.client app.py
           Rename-Item dist\CentralPDFScanner CentralPDFScanner_Portable
           New-Item -ItemType Directory -Force -Path dist\CentralPDFScanner_Portable\engines\tesseract
           Copy-Item "C:\Program Files\Tesseract-OCR\*" dist\CentralPDFScanner_Portable\engines\tesseract -Recurse -Force
