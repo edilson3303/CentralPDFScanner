@@ -203,6 +203,19 @@ class PDFToolsTests(unittest.TestCase):
         with self.assertRaisesRegex(PDFToolError, "Senha incorreta"):
             unprotect_pdf(protected, self.root / "falha.pdf", "errada")
 
+    def test_opening_and_editing_protections_are_independent(self) -> None:
+        opening_only = protect_pdf(self.source, self.root / "abertura.pdf", "Abrir123")
+        reader = PdfReader(str(opening_only))
+        self.assertEqual(int(reader.decrypt("")), 0)
+        self.assertEqual(int(reader.decrypt("Abrir123")), 1)
+        self.assertTrue(bool(reader.user_access_permissions & UserAccessPermissions.MODIFY))
+
+        editing_only = protect_pdf(self.source, self.root / "edicao.pdf", "", "Dono123", True)
+        reader = PdfReader(str(editing_only))
+        self.assertEqual(int(reader.decrypt("")), 1)
+        self.assertFalse(bool(reader.user_access_permissions & UserAccessPermissions.MODIFY))
+        self.assertFalse(bool(reader.user_access_permissions & UserAccessPermissions.EXTRACT))
+
     def test_scanner_connection_type_labels(self) -> None:
         self.assertEqual(_detect_connection_type(r"USBSCAN\\VID_1234"), "USB / conectado")
         self.assertEqual(_detect_connection_type("SWD DAFWSDProvider WSD Scanner"), "Rede")
