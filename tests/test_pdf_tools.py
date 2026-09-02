@@ -26,10 +26,12 @@ from central_pdf_scanner.pdf_tools import (
 from central_pdf_scanner.scanner import _detect_connection_type
 from central_pdf_scanner.escl_scanner import (
     ESCLScannerError,
+    detect_escl_sources,
     probe_escl_scanner,
     scan_escl_to_pdf,
     validate_ip_settings,
 )
+from central_pdf_scanner.scanner import _sources_from_wia_capabilities
 from central_pdf_scanner.word_tools import pdf_to_word
 from central_pdf_scanner.ocr import find_tesseract, images_to_searchable_pdf
 from central_pdf_scanner.word_tools import word_to_pdf
@@ -52,7 +54,12 @@ class FakeESCLHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         if self.path == "/eSCL/ScannerCapabilities":
-            content = b'<scan:ScannerCapabilities xmlns:scan="http://schemas.hp.com/imaging/escl/2011/05/03" />'
+            content = (
+                b'<scan:ScannerCapabilities xmlns:scan="http://schemas.hp.com/imaging/escl/2011/05/03">'
+                b'<scan:Platen><scan:PlatenInputCaps /></scan:Platen>'
+                b'<scan:Adf><scan:AdfSimplexInputCaps /></scan:Adf>'
+                b'</scan:ScannerCapabilities>'
+            )
             self.send_response(200)
             self.send_header("Content-Type", "application/xml")
             self.send_header("Content-Length", str(len(content)))
@@ -155,6 +162,11 @@ class PDFToolsTests(unittest.TestCase):
         self.assertEqual(_detect_connection_type("SWD DAFWSDProvider WSD Scanner"), "Rede")
         self.assertEqual(_detect_connection_type("Scanner virtual"), "Instalado no Windows")
 
+    def test_wia_scanner_source_detection(self) -> None:
+        self.assertEqual(_sources_from_wia_capabilities(2), ("Vidro",))
+        self.assertEqual(_sources_from_wia_capabilities(1), ("Alimentador superior",))
+        self.assertEqual(_sources_from_wia_capabilities(3), ("Vidro", "Alimentador superior"))
+
     def test_ip_scanner_settings_validation(self) -> None:
         self.assertEqual(validate_ip_settings("192.168.1.50", 80, "HTTP"), ("192.168.1.50", 80, "http"))
         with self.assertRaises(ESCLScannerError):
@@ -169,6 +181,7 @@ class PDFToolsTests(unittest.TestCase):
         try:
             port = server.server_address[1]
             self.assertIn("encontrado", probe_escl_scanner("127.0.0.1", port))
+            self.assertEqual(detect_escl_sources("127.0.0.1", port), ("Platen", "Feeder"))
             output = scan_escl_to_pdf(
                 "127.0.0.1",
                 port,
@@ -176,12 +189,14 @@ class PDFToolsTests(unittest.TestCase):
                 self.root / "scanner_ip.pdf",
                 dpi=300,
                 color_mode="Cor",
+                input_source="Feeder",
             )
             self.assertTrue(output.is_file())
             self.assertEqual(len(PdfReader(str(output)).pages), 1)
             settings = server.scan_settings  # type: ignore[attr-defined]
             self.assertIn(b"RGB24", settings)
             self.assertIn(b"300", settings)
+            self.assertIn(b"Feeder", settings)
         finally:
             server.shutdown()
             server.server_close()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import queue
 import subprocess
@@ -12,7 +13,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from PIL import Image, ImageTk
 
 from . import __version__
-from .escl_scanner import ESCLScannerError, scan_escl_to_pdf, validate_ip_settings
+from .escl_scanner import ESCLScannerError, detect_escl_sources, scan_escl_to_pdf, validate_ip_settings
 from .ocr import find_tesseract
 from .pdf_tools import (
     crop_pdf,
@@ -44,6 +45,31 @@ def resource_path(relative: str) -> Path:
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         return Path(sys._MEIPASS) / relative  # type: ignore[attr-defined]
     return app_directory() / relative
+
+
+def _load_last_scanner_ip() -> str:
+    try:
+        data = json.loads((app_directory() / "configuracao.json").read_text(encoding="utf-8"))
+        address, _, _ = validate_ip_settings(str(data.get("ultimo_ip_scanner", "")), 80, "http")
+        return address
+    except (OSError, ValueError, TypeError, json.JSONDecodeError, ESCLScannerError):
+        return ""
+
+
+def _save_last_scanner_ip(ip_address: str) -> None:
+    target = app_directory() / "configuracao.json"
+    temporary = target.with_suffix(".tmp")
+    try:
+        temporary.write_text(
+            json.dumps({"ultimo_ip_scanner": ip_address}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        temporary.replace(target)
+    except OSError:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 class CentralApp(tk.Tk):
@@ -329,7 +355,7 @@ class CentralApp(tk.Tk):
         self.wait_window(dialog)
         if dialog.result is None:
             return
-        device_id, dpi, color, use_ocr, language = dialog.result
+        device_id, dpi, color, input_source, use_ocr, language = dialog.result
         output = self._save_pdf("Salvar digitalização", "digitalizacao.pdf")
         if not output:
             return
@@ -341,6 +367,7 @@ class CentralApp(tk.Tk):
             output,
             dpi=dpi,
             color_mode=color,
+            input_source=input_source,
             use_ocr=use_ocr,
             language=language,
             app_dir=app_directory(),
@@ -364,11 +391,12 @@ class CentralApp(tk.Tk):
         return answer["value"]
 
     def scan_by_ip(self) -> None:
-        dialog = IPScanDialog(self, find_tesseract(app_directory()) is not None)
+        dialog = IPScanDialog(self, find_tesseract(app_directory()) is not None, _load_last_scanner_ip())
         self.wait_window(dialog)
         if dialog.result is None:
             return
-        ip_address, port, protocol, dpi, color, use_ocr, language = dialog.result
+        ip_address, port, protocol, dpi, color, input_source, use_ocr, language = dialog.result
+        _save_last_scanner_ip(ip_address)
         output = self._save_pdf("Salvar digitalização por IP", "digitalizacao_ip.pdf")
         if not output:
             return
@@ -381,6 +409,7 @@ class CentralApp(tk.Tk):
             output,
             dpi=dpi,
             color_mode=color,
+            input_source=input_source,
             use_ocr=use_ocr,
             language=language,
             app_dir=app_directory(),
@@ -500,18 +529,29 @@ class ScanDialog(BaseDialog):
             combo.current(0 if row != 1 else 2)
             combo.grid(row=row, column=1, pady=5)
             self.combos.append(combo)
+        self.combos[0].bind("<<ComboboxSelected>>", self._scanner_changed)
+        ttk.Label(self.body, text="Origem").grid(row=3, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.source = ttk.Combobox(self.body, state="readonly", width=34)
+        self.source.grid(row=3, column=1, pady=5)
+        self._scanner_changed()
         self.ocr = tk.BooleanVar(value=False)
         ocr_text = "Aplicar OCR (PDF pesquisável)" if ocr_available else "Aplicar OCR (Tesseract não encontrado)"
-        ttk.Checkbutton(self.body, text=ocr_text, variable=self.ocr, state="normal" if ocr_available else "disabled").grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 4))
-        ttk.Label(self.body, text="Idioma OCR").grid(row=4, column=0, sticky="w", padx=(0, 12), pady=5)
+        ttk.Checkbutton(self.body, text=ocr_text, variable=self.ocr, state="normal" if ocr_available else "disabled").grid(row=4, column=0, columnspan=2, sticky="w", pady=(10, 4))
+        ttk.Label(self.body, text="Idioma OCR").grid(row=5, column=0, sticky="w", padx=(0, 12), pady=5)
         self.language = ttk.Combobox(self.body, values=("por", "por+eng", "eng"), width=34)
         self.language.set("por+eng")
-        self.language.grid(row=4, column=1, pady=5)
+        self.language.grid(row=5, column=1, pady=5)
         ttk.Label(
             self.body,
             text="A lista inclui scanners de rede e USB instalados no Windows.",
-        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(8, 0))
         self.buttons(self.accept)
+
+    def _scanner_changed(self, _event=None) -> None:
+        index = self.combos[0].current()
+        sources = self.devices[index].sources if index >= 0 else ("Vidro",)
+        self.source.configure(values=sources)
+        self.source.current(0)
 
     def accept(self) -> None:
         index = self.combos[0].current()
@@ -519,6 +559,7 @@ class ScanDialog(BaseDialog):
             self.devices[index].device_id,
             int(self.combos[1].get()),
             self.combos[2].get(),
+            self.source.get(),
             bool(self.ocr.get()),
             self.language.get().strip() or "por+eng",
         )
@@ -526,12 +567,17 @@ class ScanDialog(BaseDialog):
 
 
 class IPScanDialog(BaseDialog):
-    def __init__(self, parent: tk.Misc, ocr_available: bool) -> None:
+    SOURCE_LABELS = {"Platen": "Vidro", "Feeder": "Alimentador superior"}
+
+    def __init__(self, parent: tk.Misc, ocr_available: bool, last_ip: str = "") -> None:
         super().__init__(parent, "Scanner de rede")
         self.withdraw()
+        self._source_results: queue.Queue[tuple[str, str, object]] = queue.Queue()
+        self._detect_after = None
+        self._detected_ip = ""
         ttk.Label(self.body, text="IP da multifuncional").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=5)
         self.ip_address = ttk.Entry(self.body, width=35)
-        self.ip_address.insert(0, "192.168.1.50")
+        self.ip_address.insert(0, last_ip)
         self.ip_address.grid(row=0, column=1, pady=5)
         self.ip_address.focus_set()
 
@@ -545,6 +591,10 @@ class IPScanDialog(BaseDialog):
         self.color.set("Cor")
         self.color.grid(row=2, column=1, pady=5)
 
+        ttk.Label(self.body, text="Origem").grid(row=3, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.source = ttk.Combobox(self.body, state="disabled", width=32)
+        self.source.grid(row=3, column=1, pady=5)
+
         self.ocr = tk.BooleanVar(value=False)
         ocr_text = "Aplicar OCR (PDF pesquisável)" if ocr_available else "Aplicar OCR (Tesseract não encontrado)"
         ttk.Checkbutton(
@@ -552,19 +602,24 @@ class IPScanDialog(BaseDialog):
             text=ocr_text,
             variable=self.ocr,
             state="normal" if ocr_available else "disabled",
-        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 4))
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(10, 4))
 
-        ttk.Label(self.body, text="Idioma OCR").grid(row=4, column=0, sticky="w", padx=(0, 12), pady=5)
+        ttk.Label(self.body, text="Idioma OCR").grid(row=5, column=0, sticky="w", padx=(0, 12), pady=5)
         self.language = ttk.Combobox(self.body, values=("por", "por+eng", "eng"), width=32)
         self.language.set("por+eng")
-        self.language.grid(row=4, column=1, pady=5)
-        ttk.Label(
+        self.language.grid(row=5, column=1, pady=5)
+        self.detection_status = ttk.Label(
             self.body,
-            text="Requer eSCL/AirScan habilitado na multifuncional.",
+            text="Digite o IP para detectar vidro e alimentador.",
             foreground="#476582",
-        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(9, 0))
+        )
+        self.detection_status.grid(row=6, column=0, columnspan=2, sticky="w", pady=(9, 0))
+        self.ip_address.bind("<KeyRelease>", self._schedule_detection)
         self.bind("<Return>", lambda _event: self.accept())
         self.buttons(self.accept)
+        self.after(100, self._poll_source_results)
+        if last_ip:
+            self._schedule_detection(delay=150)
         self.update_idletasks()
         width = self.winfo_reqwidth()
         height = self.winfo_reqheight()
@@ -573,18 +628,68 @@ class IPScanDialog(BaseDialog):
         self.geometry(f"{width}x{height}+{x}+{y}")
         self.deiconify()
 
+    def _schedule_detection(self, _event=None, *, delay: int = 700) -> None:
+        if self._detect_after is not None:
+            self.after_cancel(self._detect_after)
+        self._detected_ip = ""
+        self.source.set("")
+        self.source.configure(state="disabled", values=())
+        self.detection_status.configure(text="Aguardando o endereço IP...")
+        self._detect_after = self.after(delay, self._start_detection)
+
+    def _start_detection(self) -> None:
+        self._detect_after = None
+        try:
+            address, _, _ = validate_ip_settings(self.ip_address.get(), 80, "http")
+        except ESCLScannerError:
+            self.detection_status.configure(text="Digite um endereço IP válido.")
+            return
+        self.detection_status.configure(text="Detectando vidro e alimentador...")
+
+        def worker() -> None:
+            try:
+                sources = detect_escl_sources(address, 80, "http")
+                self._source_results.put((address, "ok", sources))
+            except Exception as exc:
+                self._source_results.put((address, "error", str(exc)))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _poll_source_results(self) -> None:
+        try:
+            address, kind, payload = self._source_results.get_nowait()
+        except queue.Empty:
+            self.after(100, self._poll_source_results)
+            return
+        if address == self.ip_address.get().strip():
+            if kind == "ok":
+                values = [self.SOURCE_LABELS[source] for source in payload]
+                self.source.configure(state="readonly", values=values)
+                self.source.current(0)
+                self._detected_ip = address
+                self.detection_status.configure(text="Origens detectadas automaticamente.")
+            else:
+                self.detection_status.configure(text=str(payload))
+        self.after(100, self._poll_source_results)
+
     def accept(self) -> None:
         try:
             address, port, protocol = validate_ip_settings(self.ip_address.get(), 80, "http")
         except ESCLScannerError as exc:
             messagebox.showerror(APP_TITLE, str(exc), parent=self)
             return
+        if self._detected_ip != address or self.source.current() < 0:
+            self._start_detection()
+            messagebox.showinfo(APP_TITLE, "Aguarde a detecção das opções de digitalização.", parent=self)
+            return
+        source_code = next(code for code, label in self.SOURCE_LABELS.items() if label == self.source.get())
         self.result = (
             address,
             port,
             protocol,
             int(self.dpi.get()),
             self.color.get(),
+            source_code,
             bool(self.ocr.get()),
             self.language.get().strip() or "por+eng",
         )

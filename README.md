@@ -8,6 +8,8 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 
 - Digitalizar usando scanners instalados no Windows, inclusive multifuncionais de rede
 - Digitar o IP de uma multifuncional compatível com eSCL/AirScan e digitalizar diretamente
+- Detectar automaticamente e escolher entre o vidro e o alimentador superior, quando disponíveis
+- Memorizar o último IP de multifuncional utilizado
 - Escolher na lista scanners de rede, USB ou outros scanners instalados no Windows
 - Escolher digitalização normal ou PDF pesquisável com OCR
 - Remover páginas, juntar PDFs, cortar margens e girar páginas
@@ -34,7 +36,10 @@ Depois de extraído, o pacote abre por `CentralPDFScanner.exe` sem instalar Pyth
 
 1. Clique em **Scanner de rede**.
 2. Digite o IP exibido no painel ou na configuração de rede da multifuncional.
-3. Escolha resolução, cor e OCR e clique em **Continuar**.
+3. Aguarde a detecção automática e escolha **Vidro** ou **Alimentador superior**.
+4. Escolha resolução, cor e OCR e clique em **Continuar**.
+
+O último IP utilizado fica salvo em `configuracao.json`, dentro da pasta do programa portátil, e será preenchido automaticamente na próxima abertura.
 
 Esse modo usa automaticamente HTTP e porta 80 e requer que a multifuncional ofereça eSCL/AirScan (também usado por aparelhos compatíveis com Mopria). Se o modelo não oferecer o protocolo, instale o driver WIA do fabricante e use **Scanner instalado no Windows**.
 

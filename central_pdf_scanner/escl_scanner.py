@@ -6,6 +6,7 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Callable
 
@@ -72,7 +73,7 @@ def _friendly_network_error(exc: Exception) -> ESCLScannerError:
     )
 
 
-def probe_escl_scanner(ip_address: str, port: int = 80, protocol: str = "http", timeout: int = 8) -> str:
+def _read_capabilities(ip_address: str, port: int, protocol: str, timeout: int) -> bytes:
     base = _base_url(ip_address, port, protocol)
     request = urllib.request.Request(
         base + CAPABILITIES_PATH,
@@ -86,20 +87,49 @@ def probe_escl_scanner(ip_address: str, port: int = 80, protocol: str = "http", 
         raise _friendly_network_error(exc) from exc
     if b"ScannerCapabilities" not in content:
         raise ESCLScannerError("O endereço respondeu, mas não foi identificado como scanner eSCL/AirScan.")
+    return content
+
+
+def detect_escl_sources(
+    ip_address: str,
+    port: int = 80,
+    protocol: str = "http",
+    timeout: int = 8,
+) -> tuple[str, ...]:
+    content = _read_capabilities(ip_address, port, protocol, timeout)
+    try:
+        root = ET.fromstring(content)
+    except ET.ParseError as exc:
+        raise ESCLScannerError("A multifuncional devolveu informações de digitalização inválidas.") from exc
+
+    names = {element.tag.rsplit("}", 1)[-1].lower() for element in root.iter()}
+    sources: list[str] = []
+    if any(name in names for name in ("platen", "plateninputcaps")):
+        sources.append("Platen")
+    if any(name in names for name in ("adf", "adfsimplexinputcaps", "adfduplexinputcaps", "feeder")):
+        sources.append("Feeder")
+    # Alguns equipamentos omitem a seção Platen, embora o vidro esteja disponível.
+    return tuple(sources) or ("Platen",)
+
+
+def probe_escl_scanner(ip_address: str, port: int = 80, protocol: str = "http", timeout: int = 8) -> str:
+    _read_capabilities(ip_address, port, protocol, timeout)
     return "Scanner eSCL/AirScan encontrado"
 
 
-def _scan_settings(dpi: int, color_mode: str) -> bytes:
+def _scan_settings(dpi: int, color_mode: str, input_source: str = "Platen") -> bytes:
     if dpi not in (150, 200, 300, 400, 600):
         raise ESCLScannerError("Resolução inválida.")
     colors = {"Cor": "RGB24", "Cinza": "Grayscale8", "Preto e branco": "BlackAndWhite1"}
     color = colors.get(color_mode)
     if color is None:
         raise ESCLScannerError("Modo de cor inválido.")
+    if input_source not in {"Platen", "Feeder"}:
+        raise ESCLScannerError("Origem de digitalização inválida.")
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <scan:ScanSettings xmlns:scan="{SCAN_NAMESPACE}" xmlns:pwg="{PWG_NAMESPACE}">
   <pwg:Version>2.0</pwg:Version>
-  <pwg:InputSource>Platen</pwg:InputSource>
+  <pwg:InputSource>{input_source}</pwg:InputSource>
   <scan:ColorMode>{color}</scan:ColorMode>
   <scan:XResolution>{dpi}</scan:XResolution>
   <scan:YResolution>{dpi}</scan:YResolution>
@@ -115,10 +145,17 @@ def _job_url(base: str, location: str) -> str:
     return base + parsed.path.rstrip("/")
 
 
-def _acquire_document(base: str, protocol: str, dpi: int, color_mode: str, timeout: int) -> tuple[bytes, str]:
+def _acquire_document(
+    base: str,
+    protocol: str,
+    dpi: int,
+    color_mode: str,
+    input_source: str,
+    timeout: int,
+) -> tuple[bytes, str]:
     request = urllib.request.Request(
         base + SCAN_JOBS_PATH,
-        data=_scan_settings(dpi, color_mode),
+        data=_scan_settings(dpi, color_mode, input_source),
         headers={"Content-Type": "application/xml", "Accept": "application/xml"},
         method="POST",
     )
@@ -178,6 +215,7 @@ def scan_escl_to_pdf(
     *,
     dpi: int = 300,
     color_mode: str = "Cor",
+    input_source: str = "Platen",
     use_ocr: bool = False,
     language: str = "por+eng",
     app_dir: str | Path | None = None,
@@ -190,7 +228,7 @@ def scan_escl_to_pdf(
         images: list[Path] = []
         scanned_pages = 0
         while True:
-            data, content_type = _acquire_document(base, protocol, dpi, color_mode, timeout=180)
+            data, content_type = _acquire_document(base, protocol, dpi, color_mode, input_source, timeout=180)
             new_images = _document_to_images(data, content_type, directory, scanned_pages + 1, dpi)
             images.extend(new_images)
             scanned_pages += len(new_images)

@@ -22,6 +22,7 @@ class ScannerDevice:
     device_id: str
     name: str
     connection_type: str
+    sources: tuple[str, ...] = ("Vidro",)
 
     @property
     def display_name(self) -> str:
@@ -51,7 +52,15 @@ def list_scanners() -> list[ScannerDevice]:
         except Exception:
             pass
         connection_type = _detect_connection_type(" ".join(details))
-        devices.append(ScannerDevice(device_id, name, connection_type))
+        sources = ("Vidro",)
+        try:
+            device = info.Connect()
+            capabilities = _property(device, 3086)
+            if capabilities is not None:
+                sources = _sources_from_wia_capabilities(int(capabilities.Value))
+        except Exception:
+            pass
+        devices.append(ScannerDevice(device_id, name, connection_type, sources))
     return devices
 
 
@@ -64,6 +73,15 @@ def _detect_connection_type(details: str) -> str:
     if any(hint in value for hint in usb_hints):
         return "USB / conectado"
     return "Instalado no Windows"
+
+
+def _sources_from_wia_capabilities(capabilities: int) -> tuple[str, ...]:
+    sources: list[str] = []
+    if capabilities & 2:  # WIA_DPS_DOCUMENT_HANDLING_CAPABILITIES: FLAT
+        sources.append("Vidro")
+    if capabilities & 1:  # WIA_DPS_DOCUMENT_HANDLING_CAPABILITIES: FEED
+        sources.append("Alimentador superior")
+    return tuple(sources) or ("Vidro",)
 
 
 def _property(item, property_id: int):
@@ -88,6 +106,7 @@ def scan_to_pdf(
     *,
     dpi: int = 300,
     color_mode: str = "Cor",
+    input_source: str = "Vidro",
     use_ocr: bool = False,
     language: str = "por+eng",
     app_dir: str | Path | None = None,
@@ -106,11 +125,15 @@ def scan_to_pdf(
         raise ScannerError("O scanner selecionado não está mais disponível.")
 
     color_codes = {"Cor": 1, "Cinza": 2, "Preto e branco": 4}
+    source_codes = {"Vidro": 2, "Alimentador superior": 1}
+    if input_source not in source_codes:
+        raise ScannerError("Origem de digitalização inválida.")
     with tempfile.TemporaryDirectory(prefix="central_pdf_scan_") as temp:
         images: list[Path] = []
         page_number = 1
         while True:
             device = selected.Connect()
+            _set_property(device, 3088, source_codes[input_source])
             item = device.Items(1)
             _set_property(item, 6146, color_codes.get(color_mode, 1))
             _set_property(item, 6147, dpi)
