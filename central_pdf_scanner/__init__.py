@@ -1,3 +1,4 @@
 """Central PDF & Scanner."""
 
-__version__ = "2.3.1"
+__version__ = "2.2.0"
+

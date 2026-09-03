@@ -12,90 +12,23 @@ from docx.enum.section import WD_SECTION
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches, Pt, RGBColor
 
-from .ocr import find_tesseract, pdf_to_searchable_pdf
-
 
 class WordToolError(RuntimeError):
     pass
 
 
-def pdf_to_word(
-    input_pdf: str | Path,
-    output_docx: str | Path,
-    mode: str = "best",
-    app_dir: str | Path | None = None,
-) -> Path:
-    """Usa a melhor conversao editavel disponivel."""
+def pdf_to_word(input_pdf: str | Path, output_docx: str | Path, mode: str = "editable") -> Path:
+    """Converte PDF para Word editavel ou para uma copia visual fiel."""
     source = Path(input_pdf)
     if not source.is_file():
         raise WordToolError("PDF não encontrado.")
     target = Path(output_docx).with_suffix(".docx")
     target.parent.mkdir(parents=True, exist_ok=True)
-    if mode not in {"best", "editable"}:
-        raise WordToolError("Modo de conversão para Word inválido.")
-
-    with tempfile.TemporaryDirectory(prefix="pdf_word_best_") as temp:
-        working_source = source
-        if not _pdf_has_text(source):
-            if not find_tesseract(app_dir):
-                raise WordToolError(
-                    "Este PDF é uma digitalização sem texto reconhecido e o OCR não está disponível. "
-                    "Instale o Tesseract OCR ou use uma versão do programa que inclua o mecanismo OCR."
-                )
-            working_source = Path(temp) / "documento_com_ocr.pdf"
-            pdf_to_searchable_pdf(source, working_source, "por+eng", app_dir)
-
-        # O mecanismo de importação de PDF do Word costuma preservar melhor tabelas,
-        # colunas, cabeçalhos e objetos. O conversor portátil continua como fallback.
-        if _convert_pdf_with_word(working_source, target):
-            return target
-        return _pdf_to_word_editable(working_source, target)
-
-
-def _pdf_has_text(source: Path) -> bool:
-    document = fitz.open(source)
-    try:
-        return any(len(page.get_text("text").strip()) >= 3 for page in document)
-    finally:
-        document.close()
-
-
-def _convert_pdf_with_word(source: Path, target: Path) -> bool:
-    """Usa o recurso PDF Reflow do Microsoft Word para maximizar a fidelidade editável."""
-    try:
-        import win32com.client  # type: ignore
-    except ImportError:
-        return False
-    word = None
-    document = None
-    try:
-        word = win32com.client.DispatchEx("Word.Application")
-        word.Visible = False
-        word.DisplayAlerts = 0
-        document = word.Documents.Open(
-            str(source.resolve()),
-            ConfirmConversions=False,
-            ReadOnly=True,
-            AddToRecentFiles=False,
-            Visible=False,
-            OpenAndRepair=True,
-            NoEncodingDialog=True,
-        )
-        document.SaveAs2(str(target.resolve()), FileFormat=16, AddToRecentFiles=False)
-        return target.is_file() and target.stat().st_size > 0
-    except Exception:
-        return False
-    finally:
-        if document is not None:
-            try:
-                document.Close(False)
-            except Exception:
-                pass
-        if word is not None:
-            try:
-                word.Quit()
-            except Exception:
-                pass
+    if mode == "editable":
+        return _pdf_to_word_editable(source, target)
+    if mode == "visual":
+        return _pdf_to_word_visual(source, target)
+    raise WordToolError("Modo de conversão para Word inválido.")
 
 
 def _configure_section(section, page: fitz.Page, *, margins: float) -> None:
@@ -131,21 +64,8 @@ def _pdf_to_word_editable(source: Path, target: Path) -> Path:
             usable_width = page.rect.width - 2 * margin * 72
             previous_bottom = margin * 72
             blocks = sorted(page.get_text("dict").get("blocks", []), key=lambda item: (item["bbox"][1], item["bbox"][0]))
-            page_has_text = any(
-                block.get("type") == 0
-                and any(span.get("text", "").strip() for line in block.get("lines", []) for span in line.get("spans", []))
-                for block in blocks
-            )
             for block in blocks:
                 x0, y0, x1, y1 = block["bbox"]
-                if (
-                    block.get("type") == 1
-                    and page_has_text
-                    and (x1 - x0) * (y1 - y0) >= page.rect.width * page.rect.height * 0.65
-                ):
-                    # PDFs com OCR normalmente contêm a página inteira como imagem de fundo.
-                    # Omiti-la evita duplicação e mantém o texto verdadeiramente editável.
-                    continue
                 paragraph = document.add_paragraph()
                 paragraph.paragraph_format.space_before = Pt(max(0, min(36, y0 - previous_bottom)))
                 paragraph.paragraph_format.space_after = Pt(0)
@@ -192,6 +112,31 @@ def _pdf_to_word_editable(source: Path, target: Path) -> Path:
             )
         document.save(target)
     finally:
+        pdf.close()
+    return target
+
+
+def _pdf_to_word_visual(source: Path, target: Path) -> Path:
+    """Preserva visualmente cada pagina do PDF como imagem dentro do Word."""
+    pdf = fitz.open(source)
+    document = Document()
+    with tempfile.TemporaryDirectory(prefix="pdf_word_visual_") as temp:
+      try:
+        for page_index, page in enumerate(pdf):
+            if page_index > 0:
+                document.add_section(WD_SECTION.NEW_PAGE)
+            section = document.sections[-1]
+            _configure_section(section, page, margins=0)
+            image_path = Path(temp) / f"pagina_{page_index + 1:04d}.png"
+            page.get_pixmap(matrix=fitz.Matrix(2.5, 2.5), alpha=False).save(str(image_path))
+            paragraph = document.add_paragraph()
+            paragraph.paragraph_format.space_before = Inches(0)
+            paragraph.paragraph_format.space_after = Inches(0)
+            paragraph.add_run().add_picture(
+                str(image_path), width=Inches(page.rect.width / 72.0), height=Inches(page.rect.height / 72.0)
+            )
+        document.save(target)
+      finally:
         pdf.close()
     return target
 
@@ -254,3 +199,4 @@ def _convert_with_libreoffice(source: Path, target: Path) -> bool:
             return False
         shutil.copy2(generated, target)
     return target.is_file() and target.stat().st_size > 0
+

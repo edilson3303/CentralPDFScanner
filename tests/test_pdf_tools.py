@@ -181,23 +181,10 @@ class PDFToolsTests(unittest.TestCase):
         text = "\n".join(paragraph.text for paragraph in document.paragraphs)
         self.assertIn("Página de teste 1", text)
 
-    def test_pdf_to_word_editable_legacy_mode(self) -> None:
-        output = pdf_to_word(self.source, self.root / "editavel.docx", "editable")
-        text = "\n".join(paragraph.text for paragraph in Document(output).paragraphs)
-        self.assertIn("Página de teste 2", text)
-
-    def test_scanned_pdf_to_word_uses_ocr_when_available(self) -> None:
-        if find_tesseract() is None:
-            self.skipTest("Tesseract não disponível")
-        image = self.root / "word_ocr.png"
-        canvas = Image.new("RGB", (1400, 360), "white")
-        from PIL import ImageDraw
-        ImageDraw.Draw(canvas).text((90, 120), "DOCUMENTO OCR 67890", fill="black", font_size=72)
-        canvas.save(image)
-        scanned = images_to_pdf([image], self.root / "digitalizado.pdf")
-        output = pdf_to_word(scanned, self.root / "digitalizado.docx", "best")
-        text = "\n".join(paragraph.text for paragraph in Document(output).paragraphs)
-        self.assertIn("67890", text)
+    def test_pdf_to_word_visual_mode(self) -> None:
+        output = pdf_to_word(self.source, self.root / "visual.docx", "visual")
+        document = Document(output)
+        self.assertGreaterEqual(len(document.inline_shapes), 3)
 
     def test_protect_and_unprotect_pdf(self) -> None:
         protected = protect_pdf(self.source, self.root / "protegido.pdf", "Abrir123", "Dono123", True)
@@ -317,3 +304,4 @@ class PDFToolsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
