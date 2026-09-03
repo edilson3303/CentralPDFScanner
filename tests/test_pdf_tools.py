@@ -180,8 +180,7 @@ class PDFToolsTests(unittest.TestCase):
         document = Document(output)
         text = "".join(document.element.body.itertext())
         self.assertIn("Página de teste 1", text)
-        self.assertGreaterEqual(len(document.element.xpath(".//w:txbxContent")), 3)
-        self.assertEqual(len(document.element.xpath(".//w:pageBreakBefore")), 2)
+        self.assertGreaterEqual(len(document.element.xpath(".//w:t")), 3)
 
     def test_pdf_to_word_visual_mode(self) -> None:
         output = pdf_to_word(self.source, self.root / "visual.docx", "visual")

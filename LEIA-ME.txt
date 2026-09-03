@@ -1,4 +1,4 @@
-PDF & SCANNER 2.4.0
+PDF & SCANNER 2.5.0
 =================
 
 COMO ABRIR A VERSAO PORTATIL
@@ -47,8 +47,8 @@ CONVERSOES WORD
 - Word para PDF usa primeiro o Microsoft Word instalado. Se ele nao estiver
   disponivel, tenta o LibreOffice.
 - PDF para Word gera um DOCX editavel de alta fidelidade sem exigir Microsoft Word.
-- Sem o Word, o conversor portatil preserva fundo, imagens, cabecalho, rodape e
-  quantidade de paginas, colocando o texto em caixas editaveis no LibreOffice.
+- Sem o Word, o conversor portatil reconstrói paragrafos, tabelas e imagens,
+  mantendo o texto editavel e a formatacao compativel com o LibreOffice.
 - Diagramas e infograficos que ja sao imagens permanecem como imagens.
 - Para PDF somente digitalizado, use primeiro PDF Digitalizado para OCR.
 

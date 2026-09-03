@@ -1,8 +1,8 @@
 # PDF & Scanner
 
-Versão atual: 2.4.0
+Versão atual: 2.5.0
 
-Esta versão inclui rolagem horizontal na união, divisão por intervalos e proteção independente de abertura e edição.
+Esta versão inclui conversão de PDF para Word em parágrafos editáveis, com reconstrução de tabelas, imagens e formatação semelhante ao resultado do Smallpdf.
 
 Também oferece Word editável compatível com LibreOffice, OCR executado silenciosamente em segundo plano e instalador para Windows.
 
@@ -50,7 +50,7 @@ Depois de extraído, o pacote abre por `CentralPDFScanner.exe` sem instalar Pyth
 
 ## Gerar o instalador do Windows
 
-O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.4.0.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
+O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.5.0.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
 
 ## Digitalizar digitando o IP
 
@@ -69,7 +69,7 @@ Se o equipamento responder HTTP 409, normalmente ele está ocupado, há outro tr
 
 ## Observações de compatibilidade
 
-No modo WIA, o scanner precisa ter o driver instalado e estar cadastrado em **Configurações > Bluetooth e dispositivos > Impressoras e scanners**. Word → PDF requer Microsoft Word ou LibreOffice instalado. Em PDF → Word, quando o Microsoft Word não está instalado, o conversor portátil mantém cada página no lugar, preserva fundos, imagens, cabeçalhos e rodapés e coloca o texto em caixas editáveis compatíveis com o LibreOffice. Diagramas e infográficos que já são imagens permanecem como imagens.
+No modo WIA, o scanner precisa ter o driver instalado e estar cadastrado em **Configurações > Bluetooth e dispositivos > Impressoras e scanners**. Word → PDF requer Microsoft Word ou LibreOffice instalado. Em PDF → Word, quando o Microsoft Word não está instalado, o conversor portátil reconstrói o conteúdo como parágrafos, tabelas e imagens editáveis, preservando fontes, posições e formatação para edição no LibreOffice. Diagramas e infográficos que já são imagens permanecem como imagens.
 
 ## Licença
 

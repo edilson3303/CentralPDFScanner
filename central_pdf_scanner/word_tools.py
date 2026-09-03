@@ -4,7 +4,10 @@ import shutil
 import subprocess
 import tempfile
 import re
+import contextlib
+import logging
 from io import BytesIO
+from zipfile import ZIP_DEFLATED, ZipFile
 from pathlib import Path
 
 import fitz
@@ -37,6 +40,13 @@ def pdf_to_word(input_pdf: str | Path, output_docx: str | Path, mode: str = "edi
         if _convert_pdf_with_word(source, target):
             return target
         if _pdf_has_visible_text(source):
+            try:
+                return _pdf_to_word_portable_reflow(source, target)
+            except Exception:
+                # Conversor de seguranca para PDFs com estruturas incomuns.
+                # Ele mantem o documento utilizavel mesmo quando o mecanismo de
+                # reconstrucao em paragrafos nao consegue interpretar uma pagina.
+                pass
             return _pdf_to_word_high_fidelity(source, target)
         return _pdf_to_word_editable(source, target)
     if mode == "visual":
@@ -102,6 +112,74 @@ def _pdf_has_visible_text(source: Path) -> bool:
     finally:
         pdf.close()
     return False
+
+
+def _compact_reflow_layout(source: Path, target: Path) -> None:
+    """Evita pequenas quebras extras ao abrir o DOCX no LibreOffice.
+
+    O PDF usa coordenadas exatas, enquanto Word e LibreOffice recalculam as
+    metricas das fontes. Uma reducao discreta apenas nos espacamentos verticais
+    compensa essa diferenca sem reduzir o tamanho das letras ou rasterizar texto.
+    """
+    word_namespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    with ZipFile(source) as input_archive, ZipFile(target, "w", ZIP_DEFLATED) as output_archive:
+        for item in input_archive.infolist():
+            data = input_archive.read(item.filename)
+            if item.filename.startswith("word/") and item.filename.endswith(".xml"):
+                try:
+                    root = etree.fromstring(data)
+                    changed = False
+                    for spacing in root.iter(f"{{{word_namespace}}}spacing"):
+                        for attribute in ("before", "after", "line"):
+                            qualified = f"{{{word_namespace}}}{attribute}"
+                            value = spacing.get(qualified)
+                            if value and value.lstrip("-").isdigit():
+                                compacted = str(max(0, round(int(value) * 0.94)))
+                                if compacted != value:
+                                    spacing.set(qualified, compacted)
+                                    changed = True
+                    if changed:
+                        data = etree.tostring(
+                            root,
+                            xml_declaration=True,
+                            encoding="UTF-8",
+                            standalone=True,
+                        )
+                except (etree.XMLSyntaxError, ValueError):
+                    pass
+            output_archive.writestr(item, data)
+
+
+def _pdf_to_word_portable_reflow(source: Path, target: Path) -> Path:
+    """Reconstrui o PDF em paragrafos, tabelas e imagens editaveis.
+
+    Este e o modo portatil de maior qualidade e funciona sem Microsoft Word,
+    inclusive quando o arquivo final sera editado no LibreOffice.
+    """
+    from pdf2docx import Converter
+
+    with tempfile.TemporaryDirectory(prefix="pdf_word_reflow_") as temporary:
+        intermediate = Path(temporary) / "reflow.docx"
+        converter = Converter(str(source))
+        try:
+            # O limite 1.0 evita descartar linhas legitimas em sumarios e
+            # layouts densos. O modo sequencial tambem evita a corrida de
+            # arquivos temporarios observada em documentos muito extensos.
+            with open(Path(temporary) / "conversion.log", "w", encoding="utf-8") as quiet:
+                logging.disable(logging.INFO)
+                with contextlib.redirect_stdout(quiet), contextlib.redirect_stderr(quiet):
+                    converter.convert(
+                        str(intermediate),
+                        line_overlap_threshold=1.0,
+                        multi_processing=False,
+                    )
+        finally:
+            logging.disable(logging.NOTSET)
+            converter.close()
+        if not intermediate.is_file() or intermediate.stat().st_size == 0:
+            raise WordToolError("Não foi possível reconstruir o PDF no formato Word.")
+        _compact_reflow_layout(intermediate, target)
+    return target
 
 
 def _clean_xml_text(value: str) -> str:
