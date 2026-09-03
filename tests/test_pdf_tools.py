@@ -186,11 +186,6 @@ class PDFToolsTests(unittest.TestCase):
         text = "\n".join(paragraph.text for paragraph in Document(output).paragraphs)
         self.assertIn("Página de teste 2", text)
 
-    def test_pdf_to_word_visual_mode(self) -> None:
-        output = pdf_to_word(self.source, self.root / "visual.docx", "visual")
-        document = Document(output)
-        self.assertGreaterEqual(len(document.inline_shapes), 3)
-
     def test_scanned_pdf_to_word_uses_ocr_when_available(self) -> None:
         if find_tesseract() is None:
             self.skipTest("Tesseract não disponível")

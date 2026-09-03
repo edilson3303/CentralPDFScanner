@@ -1,4 +1,4 @@
-PDF & SCANNER 2.3.0
+PDF & SCANNER 2.3.1
 =================
 
 COMO ABRIR A VERSAO PORTATIL
@@ -50,8 +50,6 @@ CONVERSOES WORD
   estiver instalado, preservando melhor tabelas, colunas e formatacao editavel.
 - Sem Microsoft Word, o programa usa automaticamente o conversor portatil.
 - PDFs somente digitalizados recebem OCR automaticamente antes da conversao.
-- A opcao Manter aparencia original preserva visualmente a pagina como imagem,
-  mas o texto nao fica editavel.
 
 EDICAO VISUAL
 - Remover, juntar, dividir, girar e cortar margens exibem miniaturas das paginas.

@@ -1,6 +1,6 @@
 # PDF & Scanner
 
-Versão atual: 2.3.0
+Versão atual: 2.3.1
 
 Esta versão inclui rolagem horizontal na união, divisão por intervalos e proteção independente de abertura e edição.
 
@@ -51,7 +51,7 @@ Depois de extraído, o pacote abre por `CentralPDFScanner.exe` sem instalar Pyth
 
 ## Gerar o instalador do Windows
 
-O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.3.0.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
+O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.3.1.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
 
 ## Digitalizar digitando o IP
 
@@ -70,7 +70,7 @@ Se o equipamento responder HTTP 409, normalmente ele está ocupado, há outro tr
 
 ## Observações de compatibilidade
 
-No modo WIA, o scanner precisa ter o driver instalado e estar cadastrado em **Configurações > Bluetooth e dispositivos > Impressoras e scanners**. Word → PDF requer Microsoft Word ou LibreOffice instalado. Em PDF → Word, o modo **Melhor conversão editável** usa primeiro o recurso PDF Reflow do Microsoft Word, quando instalado, e recorre ao conversor portátil se necessário. PDFs digitalizados recebem OCR automaticamente. Documentos muito complexos ainda podem precisar de pequenos ajustes. O modo **Manter aparência original** reproduz cada página como imagem, sem texto editável.
+No modo WIA, o scanner precisa ter o driver instalado e estar cadastrado em **Configurações > Bluetooth e dispositivos > Impressoras e scanners**. Word → PDF requer Microsoft Word ou LibreOffice instalado. Em PDF → Word, o programa usa primeiro o recurso PDF Reflow do Microsoft Word, quando instalado, e recorre ao conversor portátil se necessário. PDFs digitalizados recebem OCR automaticamente. Documentos muito complexos ainda podem precisar de pequenos ajustes.
 
 ## Licença
 

@@ -25,14 +25,12 @@ def pdf_to_word(
     mode: str = "best",
     app_dir: str | Path | None = None,
 ) -> Path:
-    """Usa a melhor conversao editavel disponivel ou cria uma copia visual fiel."""
+    """Usa a melhor conversao editavel disponivel."""
     source = Path(input_pdf)
     if not source.is_file():
         raise WordToolError("PDF não encontrado.")
     target = Path(output_docx).with_suffix(".docx")
     target.parent.mkdir(parents=True, exist_ok=True)
-    if mode == "visual":
-        return _pdf_to_word_visual(source, target)
     if mode not in {"best", "editable"}:
         raise WordToolError("Modo de conversão para Word inválido.")
 
@@ -194,31 +192,6 @@ def _pdf_to_word_editable(source: Path, target: Path) -> Path:
             )
         document.save(target)
     finally:
-        pdf.close()
-    return target
-
-
-def _pdf_to_word_visual(source: Path, target: Path) -> Path:
-    """Preserva visualmente cada pagina do PDF como imagem dentro do Word."""
-    pdf = fitz.open(source)
-    document = Document()
-    with tempfile.TemporaryDirectory(prefix="pdf_word_visual_") as temp:
-      try:
-        for page_index, page in enumerate(pdf):
-            if page_index > 0:
-                document.add_section(WD_SECTION.NEW_PAGE)
-            section = document.sections[-1]
-            _configure_section(section, page, margins=0)
-            image_path = Path(temp) / f"pagina_{page_index + 1:04d}.png"
-            page.get_pixmap(matrix=fitz.Matrix(2.5, 2.5), alpha=False).save(str(image_path))
-            paragraph = document.add_paragraph()
-            paragraph.paragraph_format.space_before = Inches(0)
-            paragraph.paragraph_format.space_after = Inches(0)
-            paragraph.add_run().add_picture(
-                str(image_path), width=Inches(page.rect.width / 72.0), height=Inches(page.rect.height / 72.0)
-            )
-        document.save(target)
-      finally:
         pdf.close()
     return target
 
