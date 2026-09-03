@@ -40,6 +40,7 @@ jobs:
           Copy-Item "C:\Program Files\Tesseract-OCR\*" dist\CentralPDFScanner_Portable\engines\tesseract -Recurse -Force
           Copy-Item LEIA-ME.txt dist\CentralPDFScanner_Portable\LEIA-ME.txt
           Copy-Item LICENCA.txt dist\CentralPDFScanner_Portable\LICENCA.txt
+          Copy-Item assets\pdf_scanner_feather.ico dist\CentralPDFScanner_Portable\pdf_scanner_feather.ico
           Compress-Archive -Path dist\CentralPDFScanner_Portable\* -DestinationPath dist\CentralPDFScanner_Portable.zip
       - name: Gerar instalador do Windows
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
@@ -52,4 +53,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PDF_Scanner_ALAP_Instalador_Windows
-          path: dist/installer/PDF_Scanner_ALAP_Setup_v2.5.1.exe
+          path: dist/installer/PDF_Scanner_ALAP_Setup_v2.5.2.exe
