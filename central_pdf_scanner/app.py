@@ -92,6 +92,7 @@ def _save_last_scanner_ip(ip_address: str) -> None:
 class CentralApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
+        self._configure_window_icon()
         self.title(f"{APP_TITLE} {__version__}")
         self.geometry("1040x780")
         self.minsize(820, 680)
@@ -101,6 +102,19 @@ class CentralApp(tk.Tk):
         self._configure_style()
         self._build_ui()
         self.after(100, self._poll_results)
+
+    def _configure_window_icon(self) -> None:
+        """Usa a mesma pena na janela, nos dialogos e na barra de tarefas."""
+        png_icon = resource_path("assets/pdf_scanner_feather.png")
+        ico_icon = resource_path("assets/pdf_scanner_feather.ico")
+        try:
+            if png_icon.is_file():
+                self._window_icon = tk.PhotoImage(file=str(png_icon))
+                self.iconphoto(True, self._window_icon)
+            if sys.platform == "win32" and ico_icon.is_file():
+                self.iconbitmap(default=str(ico_icon))
+        except tk.TclError:
+            pass
 
     def _configure_style(self) -> None:
         style = ttk.Style(self)
@@ -972,6 +986,13 @@ class IPScanDialog(BaseDialog):
 
 
 def main() -> None:
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ALAP.PDFScanner")
+        except (AttributeError, OSError):
+            pass
     app = CentralApp()
     app.mainloop()
 

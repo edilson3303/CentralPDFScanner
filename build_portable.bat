@@ -22,7 +22,7 @@ if exist build rmdir /s /q build
 if exist "dist\CentralPDFScanner" rmdir /s /q "dist\CentralPDFScanner"
 if exist "%APP_DIST%" rmdir /s /q "%APP_DIST%"
 
-"%APP_VENV%\Scripts\pyinstaller.exe" --noconfirm --clean --windowed --name CentralPDFScanner --add-data "assets\logo_assembleia_legislativa_amapa.png;assets" --collect-all fitz --collect-all pypdf --collect-all pdf2docx --hidden-import cv2 --hidden-import win32com.client app.py
+"%APP_VENV%\Scripts\pyinstaller.exe" --noconfirm --clean --windowed --name CentralPDFScanner --icon "assets\pdf_scanner_feather.ico" --add-data "assets\logo_assembleia_legislativa_amapa.png;assets" --add-data "assets\pdf_scanner_feather.png;assets" --add-data "assets\pdf_scanner_feather.ico;assets" --collect-all fitz --collect-all pypdf --collect-all pdf2docx --hidden-import cv2 --hidden-import win32com.client app.py
 if errorlevel 1 goto :error
 
 ren "dist\CentralPDFScanner" CentralPDFScanner_Portable
