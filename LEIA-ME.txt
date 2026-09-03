@@ -52,7 +52,6 @@ CONVERSOES WORD
 - PDFs somente digitalizados recebem OCR automaticamente antes da conversao.
 - A opcao Manter aparencia original preserva visualmente a pagina como imagem,
   mas o texto nao fica editavel.
-- Para PDF somente digitalizado, use primeiro PDF Digitalizado para OCR.
 
 EDICAO VISUAL
 - Remover, juntar, dividir, girar e cortar margens exibem miniaturas das paginas.
