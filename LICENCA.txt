@@ -1,30 +1,30 @@
-LICENCA INSTITUCIONAL DE USO DO SOFTWARE PDF & SCANNER
+LICENÇA INSTITUCIONAL DE USO DO SOFTWARE PDF & SCANNER
 
-Titular: Assembleia Legislativa do Estado do Amapa - ALAP
-Copyright (c) 2026 Assembleia Legislativa do Estado do Amapa. Todos os direitos reservados.
+Titular: Assembleia Legislativa do Estado do Amapá - ALAP
+Copyright (c) 2026 Assembleia Legislativa do Estado do Amapá. Todos os direitos reservados.
 
 1. OBJETO
-Esta licenca disciplina o uso do software PDF & Scanner, de titularidade da Assembleia Legislativa do Estado do Amapa, destinado ao apoio das atividades administrativas e institucionais da ALAP.
+Esta licença disciplina o uso do software PDF & Scanner, de titularidade da Assembleia Legislativa do Estado do Amapá, destinado ao apoio das atividades administrativas e institucionais da ALAP.
 
 2. USO AUTORIZADO
-E permitido instalar, executar e copiar o software para uso interno da ALAP, em equipamentos institucionais, por servidores, empregados, colaboradores e prestadores de servico devidamente autorizados. Tambem sao permitidas copias internas de seguranca, inventario e recuperacao.
+É permitido instalar, executar e copiar o software para uso interno da ALAP, em equipamentos institucionais, por servidores, empregados, colaboradores e prestadores de serviço devidamente autorizados.
 
-3. RESTRICOES
-Sem autorizacao formal da ALAP, e proibido vender, sublicenciar, alugar, publicar, redistribuir externamente, disponibilizar comercialmente ou utilizar o software fora das finalidades institucionais. Alteracoes, adaptacoes e distribuicao de versoes derivadas dependem de autorizacao da unidade competente e devem preservar os avisos de titularidade.
+3. RESTRIÇÕES
+Sem autorização formal da ALAP, é proibido vender, sublicenciar, alugar, publicar, redistribuir externamente, disponibilizar comercialmente ou utilizar o software fora das finalidades institucionais. Alterações, adaptações e distribuição de versões derivadas dependem de autorização da unidade competente e devem preservar os avisos de titularidade.
 
 4. COMPONENTES DE TERCEIROS
-O software incorpora ou pode acompanhar componentes de terceiros, incluindo Python, PyMuPDF, pypdf, Pillow, python-docx, pywin32 e Tesseract OCR. Esses componentes permanecem sujeitos as suas respectivas licencas, avisos e condicoes, que prevalecem quanto a cada componente.
+O software incorpora ou pode acompanhar componentes de terceiros, incluindo Python, PyMuPDF, pypdf, Pillow, python-docx, pywin32 e Tesseract OCR. Esses componentes permanecem sujeitos às suas respectivas licenças, avisos e condições, que prevalecem quanto a cada componente.
 
 5. DOCUMENTOS E DADOS
-O processamento e realizado localmente. O usuario e responsavel pela classificacao, guarda, destino e tratamento adequado dos documentos, inclusive dados pessoais e informacoes sigilosas, de acordo com as normas da ALAP e a legislacao aplicavel.
+O processamento é realizado localmente. O usuário é responsável pela classificação, guarda, destino e tratamento adequado dos documentos, inclusive dados pessoais e informações sigilosas, de acordo com as normas da ALAP e a legislação aplicável.
 
 6. GARANTIAS E RESPONSABILIDADE
-O software e fornecido para uso institucional no estado em que se encontra. Deve ser validado pela area tecnica antes da implantacao ampla. A ALAP nao se responsabiliza por perda decorrente de uso inadequado, falha de equipamento, driver, rede, componente de terceiros ou ausencia de copias de seguranca, na medida permitida pela legislacao.
+O software é fornecido para uso institucional no estado em que se encontra. Deve ser validado pela área técnica antes da implantação ampla. A ALAP não se responsabiliza por perdas decorrentes de uso inadequado ou de falhas de equipamentos, drivers, redes e componentes de terceiros.
 
-7. TITULARIDADE E LEGISLACAO
-Nenhuma disposicao transfere a titularidade do software. Aplicam-se a legislacao brasileira, especialmente a Lei Federal no 9.609/1998 e a Lei Federal no 9.610/1998, alem das normas internas da ALAP.
+7. TITULARIDADE E LEGISLAÇÃO
+Nenhuma disposição transfere a titularidade do software. Aplicam-se a legislação brasileira, especialmente a Lei Federal nº 9.609/1998 e a Lei Federal nº 9.610/1998, além das normas internas da ALAP.
 
-8. CONTATO E AUTORIZACOES
-Pedidos de uso externo, redistribuicao, alteracao ou esclarecimento devem ser encaminhados a unidade administrativa ou de tecnologia da informacao competente da Assembleia Legislativa do Estado do Amapa.
+8. CONTATO E AUTORIZAÇÕES
+Pedidos de uso externo, redistribuição, alteração ou esclarecimento devem ser encaminhados à Diretoria de Tecnologia da Informação da Assembleia Legislativa do Estado do Amapá.
 
-Versao dos termos: 1.0 - 2026.
+Versão dos termos: 1.0 - 2026.

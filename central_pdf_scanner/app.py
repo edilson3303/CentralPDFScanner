@@ -11,6 +11,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 
@@ -765,23 +766,145 @@ class LicenseDialog(BaseDialog):
     def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent, "Licença de uso")
         self.resizable(True, True)
-        text = tk.Text(self.body, width=90, height=28, wrap="word", padx=12, pady=12)
-        scroll = ttk.Scrollbar(self.body, orient="vertical", command=text.yview)
-        text.configure(yscrollcommand=scroll.set)
         try:
-            content = (app_directory() / "LICENCA.txt").read_text(encoding="utf-8")
+            self._license_content = (app_directory() / "LICENCA.txt").read_text(encoding="utf-8")
         except OSError:
-            content = "Termos de licença não encontrados neste pacote."
-        text.insert("1.0", content)
-        text.configure(state="disabled")
-        text.grid(row=0, column=0, sticky="nsew")
+            self._license_content = "Termos de licença não encontrados neste pacote."
+
+        self._license_canvas = tk.Canvas(
+            self.body,
+            background="white",
+            highlightthickness=1,
+            highlightbackground="#c7d2df",
+        )
+        scroll = ttk.Scrollbar(self.body, orient="vertical", command=self._license_canvas.yview)
+        self._license_canvas.configure(yscrollcommand=scroll.set)
+        self._license_font = tkfont.Font(family="Segoe UI", size=10)
+        self._license_bold_font = tkfont.Font(family="Segoe UI", size=10, weight="bold")
+        self._license_title_font = tkfont.Font(family="Segoe UI", size=12, weight="bold")
+        self._render_job: str | None = None
+
+        self._license_canvas.grid(row=0, column=0, sticky="nsew")
         scroll.grid(row=0, column=1, sticky="ns")
         self.body.rowconfigure(0, weight=1)
         self.body.columnconfigure(0, weight=1)
+        self._license_canvas.bind("<Configure>", self._schedule_license_render)
+        self._license_canvas.bind(
+            "<MouseWheel>",
+            lambda event: self._license_canvas.yview_scroll(-1 if event.delta > 0 else 1, "units"),
+        )
+
         row = ttk.Frame(self.body)
         row.grid(row=99, column=0, columnspan=2, sticky="e", pady=(12, 0))
-        ttk.Button(row, text="Fechar", command=self.destroy).pack()
+        ttk.Button(row, text="Copiar texto", command=self._copy_license).pack(side="left", padx=(0, 8))
+        ttk.Button(row, text="Fechar", command=self.destroy).pack(side="left")
         self.after_idle(lambda: self._show_centered_size(900, 620))
+
+    def _copy_license(self) -> None:
+        self.clipboard_clear()
+        self.clipboard_append(self._license_content)
+        messagebox.showinfo(APP_TITLE, "Texto da licença copiado.", parent=self)
+
+    def _schedule_license_render(self, _event=None) -> None:
+        if self._render_job is not None:
+            self.after_cancel(self._render_job)
+        self._render_job = self.after(60, self._render_license)
+
+    def _draw_justified_paragraph(self, text: str, y: float, width: float) -> float:
+        words = text.split()
+        if not words:
+            return y
+        space = self._license_font.measure(" ")
+        lines: list[list[str]] = []
+        current: list[str] = []
+        current_width = 0
+        for word in words:
+            word_width = self._license_font.measure(word)
+            candidate = current_width + (space if current else 0) + word_width
+            if current and candidate > width:
+                lines.append(current)
+                current = [word]
+                current_width = word_width
+            else:
+                current.append(word)
+                current_width = candidate
+        if current:
+            lines.append(current)
+
+        line_height = self._license_font.metrics("linespace") + 5
+        for line_number, line_words in enumerate(lines):
+            word_widths = [self._license_font.measure(word) for word in line_words]
+            justify = line_number < len(lines) - 1 and len(line_words) > 1
+            gap = (
+                (width - sum(word_widths)) / (len(line_words) - 1)
+                if justify
+                else space
+            )
+            x = 18.0
+            for word, word_width in zip(line_words, word_widths):
+                self._license_canvas.create_text(
+                    x,
+                    y,
+                    text=word,
+                    anchor="nw",
+                    font=self._license_font,
+                    fill="#1f2937",
+                )
+                x += word_width + gap
+            y += line_height
+        return y
+
+    def _render_license(self) -> None:
+        self._render_job = None
+        canvas_width = max(360, self._license_canvas.winfo_width())
+        text_width = canvas_width - 36
+        self._license_canvas.delete("all")
+        y = 18.0
+        blocks = re.split(r"\n\s*\n", self._license_content.strip())
+        for block in blocks:
+            lines = [line.strip() for line in block.splitlines() if line.strip()]
+            if not lines:
+                continue
+            first = lines[0]
+            if first.startswith("LICENÇA INSTITUCIONAL"):
+                self._license_canvas.create_text(
+                    canvas_width / 2,
+                    y,
+                    text=first,
+                    anchor="n",
+                    font=self._license_title_font,
+                    fill="#173b67",
+                )
+                y += self._license_title_font.metrics("linespace") + 14
+            elif re.match(r"^\d+\.\s", first):
+                self._license_canvas.create_text(
+                    18,
+                    y,
+                    text=first,
+                    anchor="nw",
+                    font=self._license_bold_font,
+                    fill="#173b67",
+                )
+                y += self._license_bold_font.metrics("linespace") + 7
+                if len(lines) > 1:
+                    y = self._draw_justified_paragraph(" ".join(lines[1:]), y, text_width)
+                y += 10
+            elif first.startswith(("Titular:", "Copyright", "Versão dos termos:")):
+                for line in lines:
+                    self._license_canvas.create_text(
+                        18,
+                        y,
+                        text=line,
+                        anchor="nw",
+                        font=self._license_font,
+                        fill="#1f2937",
+                    )
+                    y += self._license_font.metrics("linespace") + 5
+                y += 7
+            else:
+                y = self._draw_justified_paragraph(" ".join(lines), y, text_width)
+                y += 10
+        self._license_canvas.configure(scrollregion=(0, 0, canvas_width, y + 18))
 
     def _show_centered_size(self, width: int, height: int) -> None:
         x = max(0, (self.winfo_screenwidth() - width) // 2)
@@ -790,7 +913,6 @@ class LicenseDialog(BaseDialog):
         self.deiconify()
         self.lift()
         self.grab_set()
-
 
 class ScanDialog(BaseDialog):
     def __init__(self, parent: tk.Misc, devices, ocr_available: bool) -> None:
