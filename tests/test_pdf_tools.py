@@ -177,6 +177,14 @@ class PDFToolsTests(unittest.TestCase):
         output = pdf_to_word(self.source, self.root / "saida.docx")
         self.assertTrue(output.is_file())
         self.assertGreater(output.stat().st_size, 0)
+        document = Document(output)
+        text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+        self.assertIn("Página de teste 1", text)
+
+    def test_pdf_to_word_visual_mode(self) -> None:
+        output = pdf_to_word(self.source, self.root / "visual.docx", "visual")
+        document = Document(output)
+        self.assertGreaterEqual(len(document.inline_shapes), 3)
 
     def test_protect_and_unprotect_pdf(self) -> None:
         protected = protect_pdf(self.source, self.root / "protegido.pdf", "Abrir123", "Dono123", True)
@@ -296,3 +304,4 @@ class PDFToolsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

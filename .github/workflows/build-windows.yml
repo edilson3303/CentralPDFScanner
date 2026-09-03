@@ -29,6 +29,7 @@ jobs:
       - name: Preparar OCR portatil
         run: |
           choco install tesseract --yes --no-progress
+          choco install innosetup --yes --no-progress
           $tessdata = "C:\Program Files\Tesseract-OCR\tessdata"
           Invoke-WebRequest -Uri "https://github.com/tesseract-ocr/tessdata_fast/raw/main/por.traineddata" -OutFile "$tessdata\por.traineddata"
       - name: Gerar executavel
@@ -40,8 +41,15 @@ jobs:
           Copy-Item LEIA-ME.txt dist\CentralPDFScanner_Portable\LEIA-ME.txt
           Copy-Item LICENCA.txt dist\CentralPDFScanner_Portable\LICENCA.txt
           Compress-Archive -Path dist\CentralPDFScanner_Portable\* -DestinationPath dist\CentralPDFScanner_Portable.zip
+      - name: Gerar instalador do Windows
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
       - name: Publicar pacote
         uses: actions/upload-artifact@v4
         with:
           name: CentralPDFScanner_Portable_Windows
           path: dist/CentralPDFScanner_Portable.zip
+      - name: Publicar instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDF_Scanner_ALAP_Instalador_Windows
+          path: dist/installer/PDF_Scanner_ALAP_Setup_v2.2.0.exe

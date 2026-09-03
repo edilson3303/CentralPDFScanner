@@ -15,6 +15,19 @@ class OCRError(RuntimeError):
     pass
 
 
+def _hidden_process_options() -> dict[str, object]:
+    """Impede que executaveis auxiliares abram uma janela de console no Windows."""
+    if os.name != "nt":
+        return {}
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    return {
+        "creationflags": subprocess.CREATE_NO_WINDOW,
+        "startupinfo": startupinfo,
+    }
+
+
 def find_tesseract(app_dir: str | Path | None = None) -> Path | None:
     candidates: list[Path] = []
     if app_dir:
@@ -58,7 +71,14 @@ def images_to_searchable_pdf(
         for index, image in enumerate(images):
             base = temp_dir / f"pagina_{index + 1:04d}"
             command = [str(executable), str(image), str(base), "-l", language, "pdf"]
-            result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                **_hidden_process_options(),
+            )
             generated = base.with_suffix(".pdf")
             if result.returncode != 0 or not generated.is_file():
                 detail = result.stderr.strip() or "falha não especificada"

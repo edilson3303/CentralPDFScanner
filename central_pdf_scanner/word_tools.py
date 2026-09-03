@@ -3,25 +3,121 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
+from io import BytesIO
 from pathlib import Path
 
 import fitz
 from docx import Document
 from docx.enum.section import WD_SECTION
-from docx.shared import Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Inches, Pt, RGBColor
 
 
 class WordToolError(RuntimeError):
     pass
 
 
-def pdf_to_word(input_pdf: str | Path, output_docx: str | Path) -> Path:
-    """Preserva visualmente cada pagina do PDF dentro do Word."""
+def pdf_to_word(input_pdf: str | Path, output_docx: str | Path, mode: str = "editable") -> Path:
+    """Converte PDF para Word editavel ou para uma copia visual fiel."""
     source = Path(input_pdf)
     if not source.is_file():
         raise WordToolError("PDF não encontrado.")
     target = Path(output_docx).with_suffix(".docx")
     target.parent.mkdir(parents=True, exist_ok=True)
+    if mode == "editable":
+        return _pdf_to_word_editable(source, target)
+    if mode == "visual":
+        return _pdf_to_word_visual(source, target)
+    raise WordToolError("Modo de conversão para Word inválido.")
+
+
+def _configure_section(section, page: fitz.Page, *, margins: float) -> None:
+    section.page_width = Inches(page.rect.width / 72.0)
+    section.page_height = Inches(page.rect.height / 72.0)
+    section.top_margin = Inches(margins)
+    section.bottom_margin = Inches(margins)
+    section.left_margin = Inches(margins)
+    section.right_margin = Inches(margins)
+    section.header_distance = Inches(0)
+    section.footer_distance = Inches(0)
+
+
+def _remove_initial_paragraph(document: Document) -> None:
+    if document.paragraphs:
+        paragraph = document.paragraphs[0]
+        paragraph._element.getparent().remove(paragraph._element)
+
+
+def _pdf_to_word_editable(source: Path, target: Path) -> Path:
+    """Recria texto, estilos basicos, imagens e espacamento em elementos editaveis."""
+    pdf = fitz.open(source)
+    document = Document()
+    _remove_initial_paragraph(document)
+    text_characters = 0
+    try:
+        for page_index, page in enumerate(pdf):
+            if page_index > 0:
+                document.add_section(WD_SECTION.NEW_PAGE)
+            section = document.sections[-1]
+            margin = 0.28
+            _configure_section(section, page, margins=margin)
+            usable_width = page.rect.width - 2 * margin * 72
+            previous_bottom = margin * 72
+            blocks = sorted(page.get_text("dict").get("blocks", []), key=lambda item: (item["bbox"][1], item["bbox"][0]))
+            for block in blocks:
+                x0, y0, x1, y1 = block["bbox"]
+                paragraph = document.add_paragraph()
+                paragraph.paragraph_format.space_before = Pt(max(0, min(36, y0 - previous_bottom)))
+                paragraph.paragraph_format.space_after = Pt(0)
+                paragraph.paragraph_format.left_indent = Pt(max(0, x0 - margin * 72))
+                # Reserva uma pequena folga para diferenças de métrica entre a fonte do PDF e a do Word.
+                paragraph.paragraph_format.right_indent = Pt(max(0, page.rect.width - margin * 72 - x1 - 36))
+                block_center = (x0 + x1) / 2
+                if abs(block_center - page.rect.width / 2) < 18 and (x1 - x0) < usable_width * 0.88:
+                    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                elif x0 > page.rect.width * 0.55:
+                    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+                if block.get("type") == 0:
+                    for line_index, line in enumerate(block.get("lines", [])):
+                        if line_index:
+                            paragraph.add_run().add_break()
+                        for span in line.get("spans", []):
+                            text = span.get("text", "")
+                            text_characters += len(text.strip())
+                            run = paragraph.add_run(text)
+                            font_name = str(span.get("font", "Arial")).split(",", 1)[0]
+                            run.font.name = font_name
+                            run.font.size = Pt(max(5, min(72, float(span.get("size", 11)))))
+                            flags = int(span.get("flags", 0))
+                            run.bold = bool(flags & 16) or "bold" in font_name.lower()
+                            run.italic = bool(flags & 2) or "italic" in font_name.lower()
+                            color = int(span.get("color", 0))
+                            run.font.color.rgb = RGBColor((color >> 16) & 255, (color >> 8) & 255, color & 255)
+                elif block.get("type") == 1 and block.get("image"):
+                    try:
+                        width = min(max(0.25, (x1 - x0) / 72), usable_width / 72)
+                        paragraph.add_run().add_picture(BytesIO(block["image"]), width=Inches(width))
+                    except Exception:
+                        paragraph._element.getparent().remove(paragraph._element)
+                        continue
+                else:
+                    paragraph._element.getparent().remove(paragraph._element)
+                    continue
+                previous_bottom = max(previous_bottom, y1)
+        if text_characters == 0:
+            raise WordToolError(
+                "Este PDF não possui texto reconhecido. Primeiro use 'PDF digitalizado para OCR' "
+                "e depois converta o resultado para Word editável."
+            )
+        document.save(target)
+    finally:
+        pdf.close()
+    return target
+
+
+def _pdf_to_word_visual(source: Path, target: Path) -> Path:
+    """Preserva visualmente cada pagina do PDF como imagem dentro do Word."""
     pdf = fitz.open(source)
     document = Document()
     with tempfile.TemporaryDirectory(prefix="pdf_word_visual_") as temp:
@@ -30,14 +126,7 @@ def pdf_to_word(input_pdf: str | Path, output_docx: str | Path) -> Path:
             if page_index > 0:
                 document.add_section(WD_SECTION.NEW_PAGE)
             section = document.sections[-1]
-            section.page_width = Inches(page.rect.width / 72.0)
-            section.page_height = Inches(page.rect.height / 72.0)
-            section.top_margin = Inches(0)
-            section.bottom_margin = Inches(0)
-            section.left_margin = Inches(0)
-            section.right_margin = Inches(0)
-            section.header_distance = Inches(0)
-            section.footer_distance = Inches(0)
+            _configure_section(section, page, margins=0)
             image_path = Path(temp) / f"pagina_{page_index + 1:04d}.png"
             page.get_pixmap(matrix=fitz.Matrix(2.5, 2.5), alpha=False).save(str(image_path))
             paragraph = document.add_paragraph()
@@ -110,3 +199,4 @@ def _convert_with_libreoffice(source: Path, target: Path) -> bool:
             return False
         shutil.copy2(generated, target)
     return target.is_file() and target.stat().st_size > 0
+
