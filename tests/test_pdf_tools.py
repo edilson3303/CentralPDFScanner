@@ -178,8 +178,10 @@ class PDFToolsTests(unittest.TestCase):
         self.assertTrue(output.is_file())
         self.assertGreater(output.stat().st_size, 0)
         document = Document(output)
-        text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+        text = "".join(document.element.body.itertext())
         self.assertIn("Página de teste 1", text)
+        self.assertGreaterEqual(len(document.element.xpath(".//w:txbxContent")), 3)
+        self.assertEqual(len(document.element.xpath(".//w:pageBreakBefore")), 2)
 
     def test_pdf_to_word_visual_mode(self) -> None:
         output = pdf_to_word(self.source, self.root / "visual.docx", "visual")
@@ -304,4 +306,3 @@ class PDFToolsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

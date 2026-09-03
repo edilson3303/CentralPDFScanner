@@ -1,10 +1,10 @@
 # PDF & Scanner
 
-Versão atual: 2.2.0
+Versão atual: 2.4.0
 
 Esta versão inclui rolagem horizontal na união, divisão por intervalos e proteção independente de abertura e edição.
 
-Também oferece Word editável, OCR executado silenciosamente em segundo plano e instalador para Windows.
+Também oferece Word editável compatível com LibreOffice, OCR executado silenciosamente em segundo plano e instalador para Windows.
 
 Aplicativo desktop portátil para Windows 10/11, em português, que reúne digitalização WIA ou diretamente por IP, OCR e ferramentas de PDF, Word e imagem. Todo o processamento é local.
 
@@ -23,7 +23,7 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 - Escolher digitalização normal ou PDF pesquisável com OCR; idiomas aparecem por nome completo
 - Trabalhar visualmente com miniaturas ao remover, juntar, dividir, girar ou cortar páginas
 - Cortar margens superior e inferior em centímetros
-- Converter PDF para Word editável ou para Word com aparência visual idêntica
+- Converter PDF para Word editável de alta fidelidade, sem exigir o Microsoft Word
 - Converter PDF para JPG e JPG/PNG/TIFF/BMP para PDF
 - Proteger a abertura do PDF e/ou bloquear edição, seleção e cópia com AES-256
 - Desproteger PDFs mediante a senha correta
@@ -50,7 +50,7 @@ Depois de extraído, o pacote abre por `CentralPDFScanner.exe` sem instalar Pyth
 
 ## Gerar o instalador do Windows
 
-O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.2.0.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
+O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.4.0.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
 
 ## Digitalizar digitando o IP
 
@@ -69,7 +69,7 @@ Se o equipamento responder HTTP 409, normalmente ele está ocupado, há outro tr
 
 ## Observações de compatibilidade
 
-No modo WIA, o scanner precisa ter o driver instalado e estar cadastrado em **Configurações > Bluetooth e dispositivos > Impressoras e scanners**. Word → PDF requer Microsoft Word ou LibreOffice instalado. Em PDF → Word, o modo **Word editável** recria texto, fontes, cores, imagens e espaçamento; documentos muito complexos podem precisar de pequenos ajustes. O modo **Manter aparência original** reproduz cada página como imagem, sem texto editável.
+No modo WIA, o scanner precisa ter o driver instalado e estar cadastrado em **Configurações > Bluetooth e dispositivos > Impressoras e scanners**. Word → PDF requer Microsoft Word ou LibreOffice instalado. Em PDF → Word, quando o Microsoft Word não está instalado, o conversor portátil mantém cada página no lugar, preserva fundos, imagens, cabeçalhos e rodapés e coloca o texto em caixas editáveis compatíveis com o LibreOffice. Diagramas e infográficos que já são imagens permanecem como imagens.
 
 ## Licença
 

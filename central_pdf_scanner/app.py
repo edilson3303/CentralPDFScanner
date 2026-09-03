@@ -374,7 +374,7 @@ class CentralApp(tk.Tk):
             return
         output = filedialog.asksaveasfilename(parent=self, title="Salvar documento Word", defaultextension=".docx", initialfile=f"{Path(source).stem}.docx", filetypes=WORD_TYPES)
         if output:
-            self._run("Convertendo PDF para Word...", pdf_to_word, source, output, "best", app_directory())
+            self._run("Convertendo PDF para Word...", pdf_to_word, source, output)
 
     def from_word(self) -> None:
         source = filedialog.askopenfilename(parent=self, title="Escolha o documento Word", filetypes=[("Documentos Word", "*.docx *.doc")])
