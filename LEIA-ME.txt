@@ -1,4 +1,4 @@
-PDF & SCANNER 2.2.0
+PDF & SCANNER 2.3.0
 =================
 
 COMO ABRIR A VERSAO PORTATIL
@@ -46,8 +46,10 @@ OCR
 CONVERSOES WORD
 - Word para PDF usa primeiro o Microsoft Word instalado. Se ele nao estiver
   disponivel, tenta o LibreOffice.
-- PDF para Word oferece Word editavel como opcao padrao, permitindo selecionar
-  e alterar o texto e preservando aproximadamente fontes, cores e posicoes.
+- PDF para Word usa primeiro a conversao nativa do Microsoft Word, quando ele
+  estiver instalado, preservando melhor tabelas, colunas e formatacao editavel.
+- Sem Microsoft Word, o programa usa automaticamente o conversor portatil.
+- PDFs somente digitalizados recebem OCR automaticamente antes da conversao.
 - A opcao Manter aparencia original preserva visualmente a pagina como imagem,
   mas o texto nao fica editavel.
 - Para PDF somente digitalizado, use primeiro PDF Digitalizado para OCR.

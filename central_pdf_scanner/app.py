@@ -378,7 +378,7 @@ class CentralApp(tk.Tk):
             return
         output = filedialog.asksaveasfilename(parent=self, title="Salvar documento Word", defaultextension=".docx", initialfile=f"{Path(source).stem}.docx", filetypes=WORD_TYPES)
         if output:
-            self._run("Convertendo PDF para Word...", pdf_to_word, source, output, dialog.result)
+            self._run("Convertendo PDF para Word...", pdf_to_word, source, output, dialog.result, app_directory())
 
     def from_word(self) -> None:
         source = filedialog.askopenfilename(parent=self, title="Escolha o documento Word", filetypes=[("Documentos Word", "*.docx *.doc")])
@@ -670,19 +670,19 @@ class PasswordDialog(BaseDialog):
 class WordConversionModeDialog(BaseDialog):
     def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent, "PDF para Word")
-        self.mode = tk.StringVar(value="editable")
+        self.mode = tk.StringVar(value="best")
         ttk.Label(self.body, text="Escolha o tipo de documento Word:", font=("Segoe UI", 10, "bold")).grid(
             row=0, column=0, sticky="w", pady=(0, 10)
         )
         ttk.Radiobutton(
             self.body,
-            text="Word editável (recomendado)",
+            text="Melhor conversão editável (recomendado)",
             variable=self.mode,
-            value="editable",
+            value="best",
         ).grid(row=1, column=0, sticky="w", pady=3)
         ttk.Label(
             self.body,
-            text="Permite alterar o texto e tenta manter fontes, tamanhos, cores, imagens e posições.",
+            text="Usa o Microsoft Word, quando disponível, para preservar melhor tabelas, colunas e formatação. Sem ele, usa o conversor portátil.",
             wraplength=470,
         ).grid(row=2, column=0, sticky="w", padx=(24, 0), pady=(0, 9))
         ttk.Radiobutton(
