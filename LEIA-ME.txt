@@ -1,4 +1,4 @@
-PDF & SCANNER 2.5.10
+PDF & SCANNER 2.6.0
 =================
 
 COMO ABRIR A VERSAO PORTATIL
@@ -14,7 +14,7 @@ SCANNER DE REDE
   opcoes oferecidas pela multifuncional.
 - No alimentador, todas as folhas sao digitalizadas automaticamente no mesmo PDF.
 - Se o equipamento oferecer duplex, aparece a opcao Alimentador superior - frente e verso.
-- O ultimo IP utilizado fica gravado em configuracao.json na pasta do programa.
+- O ultimo IP utilizado fica gravado nas configuracoes do usuario do Windows.
 - A digitalizacao direta por IP requer que o aparelho ofereca eSCL/AirScan (Mopria).
 - Se o aparelho nao for compativel, use a opcao "Scanner USB"
   depois de instalar o driver WIA do fabricante.
@@ -42,6 +42,20 @@ OCR
 - O idioma e escolhido pelo nome completo, sem digitacao livre.
 - A conversao "PDF Digitalizado para OCR" torna PDFs pesquisaveis.
 - O OCR funciona em segundo plano, sem abrir janelas do CMD a cada pagina.
+
+REVISAO E CORRECAO DA DIGITALIZACAO
+- Antes de salvar, a digitalizacao mostra miniaturas de todas as paginas.
+- Na pre-visualizacao, voce pode reordenar, girar e excluir paginas.
+- As opcoes automaticas podem remover paginas em branco, corrigir inclinacao e orientacao.
+- Confira sempre a pre-visualizacao antes de salvar, especialmente apos usar correcoes automaticas.
+
+PERFIS DE DIGITALIZACAO
+- Use os perfis padrao ou salve um perfil personalizado com suas configuracoes frequentes.
+- O perfil guarda resolucao, cor, origem, formato, OCR e correcoes automaticas.
+
+DIAGNOSTICO
+- Clique em "Testar scanner" para verificar WIA, o ultimo scanner de rede e o Tesseract OCR.
+- O relatorio pode ser copiado ou salvo e nao inclui imagens nem conteudo dos documentos.
 
 CONVERSOES WORD
 - Word para PDF usa primeiro o Microsoft Word instalado. Se ele nao estiver

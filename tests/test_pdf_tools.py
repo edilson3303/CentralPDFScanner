@@ -14,6 +14,7 @@ from pypdf.constants import UserAccessPermissions
 
 from central_pdf_scanner.pdf_tools import (
     PDFToolError,
+    compose_scanned_pdf,
     crop_pdf,
     images_to_pdf,
     merge_pdfs,
@@ -24,6 +25,7 @@ from central_pdf_scanner.pdf_tools import (
     protect_pdf,
     remove_pages,
     rotate_pages,
+    save_preview_images_as_jpg,
     split_pdf,
     trim_vertical_pdf,
     unprotect_pdf,
@@ -41,6 +43,8 @@ from central_pdf_scanner.escl_scanner import (
 from central_pdf_scanner.scanner import ScannerDevice, _serial_from_wia_properties, _sources_from_wia_capabilities
 from central_pdf_scanner.word_tools import pdf_to_word
 from central_pdf_scanner.ocr import find_tesseract, images_to_searchable_pdf
+from central_pdf_scanner.scan_processing import is_blank_image, prepare_scanned_images
+from central_pdf_scanner.diagnostics import build_scanner_diagnostic
 from central_pdf_scanner.word_tools import word_to_pdf
 from docx import Document
 
@@ -179,6 +183,51 @@ class PDFToolsTests(unittest.TestCase):
         reader = PdfReader(str(joined))
         self.assertIn("3", reader.pages[0].extract_text())
         self.assertIn("1", reader.pages[1].extract_text())
+
+    def test_compose_scanned_pdf_reorders_and_rotates(self) -> None:
+        output = compose_scanned_pdf(
+            [(self.source, 2, 90), (self.source, 0, 0)],
+            self.root / "digitalizacao_revisada.pdf",
+        )
+        reader = PdfReader(str(output))
+        self.assertEqual(len(reader.pages), 2)
+        self.assertIn("3", reader.pages[0].extract_text())
+        self.assertEqual(reader.pages[0].rotation, 90)
+
+    def test_save_preview_images_as_jpg_reorders_and_rotates(self) -> None:
+        first = self.root / "primeira.jpg"
+        second = self.root / "segunda.jpg"
+        Image.new("RGB", (120, 60), "red").save(first)
+        Image.new("RGB", (80, 140), "blue").save(second)
+        outputs = save_preview_images_as_jpg(
+            [(second, -1, 0), (first, -1, 90)], self.root / "jpg", "Scan_TESTE"
+        )
+        self.assertEqual([path.name for path in outputs], [
+            "Scan_TESTE_pagina_001.jpg", "Scan_TESTE_pagina_002.jpg"
+        ])
+        with Image.open(outputs[1]) as rotated:
+            self.assertEqual(rotated.size, (60, 120))
+
+    def test_blank_page_detection_and_removal(self) -> None:
+        blank = self.root / "branca.jpg"
+        content = self.root / "conteudo.jpg"
+        Image.new("RGB", (500, 700), "white").save(blank)
+        image = Image.new("RGB", (500, 700), "white")
+        for x in range(80, 420):
+            for y in range(300, 320):
+                image.putpixel((x, y), (0, 0, 0))
+        image.save(content)
+        with Image.open(blank) as opened:
+            self.assertTrue(is_blank_image(opened))
+        with Image.open(content) as opened:
+            self.assertFalse(is_blank_image(opened))
+        self.assertEqual(prepare_scanned_images([blank, content], remove_blank_pages=True), [content])
+
+    def test_scanner_diagnostic_does_not_require_a_scanner(self) -> None:
+        report = build_scanner_diagnostic("2.6.0", self.root)
+        self.assertIn("Versão do software: 2.6.0", report)
+        self.assertIn("SCANNERS INSTALADOS NO WINDOWS", report)
+        self.assertIn("não contém imagens nem conteúdo", report)
 
     def test_image_round_trip(self) -> None:
         image = self.root / "imagem.jpg"

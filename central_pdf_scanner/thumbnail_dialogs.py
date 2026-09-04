@@ -284,3 +284,141 @@ class MergePagesDialog(ThumbnailDialog):
             return
         self.result = list(self.refs)
         self.destroy()
+
+
+class ScanPreviewDialog(ThumbnailDialog):
+    """Pré-visualiza páginas digitalizadas antes de escolher o destino final."""
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        *,
+        pdf_path: str | Path | None = None,
+        image_paths: list[str | Path] | None = None,
+    ) -> None:
+        super().__init__(parent, "Pré-visualização da digitalização")
+        if pdf_path:
+            source = str(pdf_path)
+            document = fitz.open(source)
+            try:
+                self.refs = [(source, index, 0) for index in range(len(document))]
+            finally:
+                document.close()
+        else:
+            self.refs = [(str(path), -1, 0) for path in (image_paths or [])]
+        self.selected = 0
+        self.photos: list[ImageTk.PhotoImage] = []
+        self.buttons: list[tk.Button] = []
+
+        ttk.Label(
+            self,
+            text="Revise as páginas. É possível reordenar, girar e excluir antes de salvar.",
+            padding=(16, 12),
+            font=("Segoe UI", 10, "bold"),
+        ).pack(fill="x")
+        tools = ttk.Frame(self, padding=(16, 0, 16, 8))
+        tools.pack(fill="x")
+        ttk.Button(tools, text="Mover antes", command=lambda: self.move(-1)).pack(side="left")
+        ttk.Button(tools, text="Mover depois", command=lambda: self.move(1)).pack(side="left", padx=6)
+        ttk.Button(tools, text="Girar à esquerda", command=lambda: self.rotate(-90)).pack(side="left", padx=(12, 6))
+        ttk.Button(tools, text="Girar à direita", command=lambda: self.rotate(90)).pack(side="left")
+        ttk.Button(tools, text="Excluir página", command=self.remove).pack(side="left", padx=(12, 0))
+        self.summary = ttk.Label(tools, text="")
+        self.summary.pack(side="right")
+
+        container = ttk.Frame(self)
+        container.pack(fill="both", expand=True, padx=16)
+        self.canvas = tk.Canvas(container, bg="#eef3f8", highlightthickness=0)
+        vertical = ttk.Scrollbar(container, orient="vertical", command=self.canvas.yview)
+        self.grid = tk.Frame(self.canvas, bg="#eef3f8")
+        self.grid.bind("<Configure>", lambda _e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.canvas.create_window((0, 0), window=self.grid, anchor="nw")
+        self.canvas.configure(yscrollcommand=vertical.set)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        vertical.pack(side="right", fill="y")
+        self.canvas.bind_all("<MouseWheel>", lambda e: self.canvas.yview_scroll(int(-e.delta / 120), "units"))
+
+        footer = ttk.Frame(self, padding=16)
+        footer.pack(fill="x")
+        ttk.Button(footer, text="Cancelar", command=self.destroy).pack(side="right")
+        ttk.Button(footer, text="Salvar digitalização", command=self.accept).pack(side="right", padx=8)
+        self.redraw()
+        self.after_idle(lambda: self.show_centered(980, 700))
+
+    def _render_ref(self, ref: tuple[str, int, int]) -> ImageTk.PhotoImage:
+        source, page_index, rotation = ref
+        if page_index >= 0:
+            document = fitz.open(source)
+            try:
+                page = document[page_index]
+                scale = min(145 / page.rect.width, 185 / page.rect.height)
+                pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+                image = Image.open(BytesIO(pixmap.tobytes("png"))).convert("RGB")
+            finally:
+                document.close()
+        else:
+            with Image.open(source) as opened:
+                image = opened.convert("RGB")
+                image.thumbnail((145, 185), Image.Resampling.LANCZOS)
+        if rotation:
+            image = image.rotate(-rotation, expand=True, fillcolor="white")
+            image.thumbnail((145, 185), Image.Resampling.LANCZOS)
+        return ImageTk.PhotoImage(image)
+
+    def redraw(self) -> None:
+        for widget in self.grid.winfo_children():
+            widget.destroy()
+        self.photos.clear()
+        self.buttons.clear()
+        self.selected = min(self.selected, max(0, len(self.refs) - 1))
+        for position, ref in enumerate(self.refs):
+            photo = self._render_ref(ref)
+            self.photos.append(photo)
+            rotation = f" — {ref[2]}°" if ref[2] else ""
+            button = tk.Button(
+                self.grid,
+                image=photo,
+                text=f"Página {position + 1}{rotation}",
+                compound="top",
+                bg="#93c5fd" if position == self.selected else "white",
+                relief="solid",
+                bd=2,
+                padx=7,
+                pady=7,
+                command=lambda value=position: self.choose(value),
+            )
+            button.grid(row=position // 5, column=position % 5, padx=10, pady=10, sticky="n")
+            self.buttons.append(button)
+        self.summary.configure(text=f"{len(self.refs)} página(s)")
+
+    def choose(self, position: int) -> None:
+        self.selected = position
+        self.redraw()
+
+    def move(self, change: int) -> None:
+        target = self.selected + change
+        if target < 0 or target >= len(self.refs):
+            return
+        self.refs[self.selected], self.refs[target] = self.refs[target], self.refs[self.selected]
+        self.selected = target
+        self.redraw()
+
+    def rotate(self, degrees: int) -> None:
+        if not self.refs:
+            return
+        source, page_index, rotation = self.refs[self.selected]
+        self.refs[self.selected] = (source, page_index, (rotation + degrees) % 360)
+        self.redraw()
+
+    def remove(self) -> None:
+        if len(self.refs) <= 1:
+            messagebox.showwarning("PDF & Scanner", "A digitalização deve manter pelo menos uma página.", parent=self)
+            return
+        self.refs.pop(self.selected)
+        self.redraw()
+
+    def accept(self) -> None:
+        if not self.refs:
+            return
+        self.result = list(self.refs)
+        self.destroy()

@@ -15,6 +15,7 @@ from PIL import Image
 
 from .ocr import images_to_searchable_pdf
 from .pdf_tools import images_to_pdf, save_images_as_jpg
+from .scan_processing import prepare_scanned_images
 
 
 class ESCLScannerError(RuntimeError):
@@ -336,6 +337,9 @@ def scan_escl_to_pdf(
     ask_next_page: Callable[[int], bool] | None = None,
     output_format: str = "PDF",
     filename_prefix: str = "Scan",
+    remove_blank_pages: bool = False,
+    auto_deskew: bool = False,
+    auto_orient: bool = False,
 ) -> Path | list[Path]:
     base = _base_url(ip_address, port, protocol)
     probe_escl_scanner(ip_address, port, protocol)
@@ -373,6 +377,13 @@ def scan_escl_to_pdf(
                     break
         if not images:
             raise ESCLScannerError("Nenhuma página foi recebida da multifuncional.")
+        images = prepare_scanned_images(
+            images,
+            remove_blank_pages=remove_blank_pages,
+            auto_deskew=auto_deskew,
+            auto_orient=auto_orient,
+            app_dir=app_dir,
+        )
         if output_format.upper() == "JPG":
             return save_images_as_jpg(images, output_pdf, filename_prefix)
         if use_ocr:

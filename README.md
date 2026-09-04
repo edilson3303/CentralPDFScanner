@@ -1,8 +1,8 @@
 # PDF & Scanner
 
-Versão atual: 2.5.10
+Versão atual: 2.6.0
 
-Esta versão aceita o endereço de trabalho `/eSCL/ScanJob` no singular retornado por alguns modelos Lexmark, além de aguardar a preparação da página e liberar trabalhos concluídos.
+Esta versão acrescenta diagnóstico integrado do scanner, perfis reutilizáveis, pré-visualização antes de salvar e correções automáticas de páginas digitalizadas.
 
 Também oferece Word editável compatível com LibreOffice, OCR executado silenciosamente em segundo plano e instalador para Windows.
 
@@ -21,6 +21,10 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 - Escolher na lista scanners de rede, USB ou outros scanners instalados no Windows
 - Salvar a digitalização em PDF ou JPG, com nome automático contendo número de série, data e hora
 - Escolher digitalização normal ou PDF pesquisável com OCR; idiomas aparecem por nome completo
+- Testar scanners WIA, conexão eSCL e OCR e salvar um relatório técnico sem conteúdo dos documentos
+- Salvar e reutilizar perfis de digitalização com resolução, cor, origem, formato e OCR
+- Pré-visualizar a digitalização, reordenar, girar ou excluir páginas antes de salvar
+- Remover páginas em branco e corrigir inclinação e orientação automaticamente
 - Trabalhar visualmente com miniaturas ao remover, juntar, dividir, girar ou cortar páginas
 - Cortar margens superior e inferior em centímetros
 - Converter PDF para Word editável de alta fidelidade, sem exigir o Microsoft Word
@@ -51,7 +55,7 @@ Depois de extraído, o pacote abre por `CentralPDFScanner.exe` sem instalar Pyth
 
 ## Gerar o instalador do Windows
 
-O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.5.10.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
+O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.6.0.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
 
 ## Digitalizar digitando o IP
 
@@ -62,7 +66,7 @@ O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.5.10.exe` com Inno Setup. Para
 
 Ao escolher o alimentador, coloque todas as folhas na bandeja. O programa digitaliza o lote automaticamente, sem perguntar página por página, e reúne todas as páginas em um único PDF. A opção frente e verso só aparece quando o equipamento informa que possui duplex.
 
-O último IP utilizado fica salvo em `configuracao.json`, dentro da pasta do programa portátil, e será preenchido automaticamente na próxima abertura.
+O último IP e os perfis personalizados ficam salvos nas configurações do usuário do Windows e serão recuperados automaticamente na próxima abertura.
 
 Esse modo usa automaticamente HTTP e porta 80 e requer que a multifuncional ofereça eSCL/AirScan (também usado por aparelhos compatíveis com Mopria). Se o modelo não oferecer o protocolo, instale o driver WIA do fabricante e use **Scanner USB**.
 

@@ -8,6 +8,7 @@ from typing import Callable
 
 from .ocr import images_to_searchable_pdf
 from .pdf_tools import images_to_pdf, save_images_as_jpg
+from .scan_processing import prepare_scanned_images
 
 
 class ScannerError(RuntimeError):
@@ -137,6 +138,9 @@ def scan_to_pdf(
     ask_next_page: Callable[[int], bool] | None = None,
     output_format: str = "PDF",
     filename_prefix: str = "Scan",
+    remove_blank_pages: bool = False,
+    auto_deskew: bool = False,
+    auto_orient: bool = False,
 ) -> Path | list[Path]:
     if dpi not in (150, 200, 300, 400, 600):
         raise ScannerError("Resolução inválida.")
@@ -190,6 +194,13 @@ def scan_to_pdf(
                 break
             page_number += 1
 
+        images = prepare_scanned_images(
+            images,
+            remove_blank_pages=remove_blank_pages,
+            auto_deskew=auto_deskew,
+            auto_orient=auto_orient,
+            app_dir=app_dir,
+        )
         if output_format.upper() == "JPG":
             return save_images_as_jpg(images, output_pdf, filename_prefix)
         if use_ocr:

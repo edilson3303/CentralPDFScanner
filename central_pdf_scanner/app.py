@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 import os
 import queue
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import traceback
 import re
@@ -12,13 +14,15 @@ from datetime import datetime
 from pathlib import Path
 import tkinter as tk
 import tkinter.font as tkfont
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 from PIL import Image, ImageTk
 
 from . import __version__
+from .diagnostics import build_scanner_diagnostic
 from .escl_scanner import ESCLScannerError, detect_escl_details, scan_escl_to_pdf, validate_ip_settings
 from .ocr import find_tesseract, pdf_to_searchable_pdf
 from .pdf_tools import (
+    compose_scanned_pdf,
     crop_pdf,
     images_to_pdf,
     merge_pdfs,
@@ -27,13 +31,14 @@ from .pdf_tools import (
     protect_pdf,
     remove_pages,
     rotate_pages,
+    save_preview_images_as_jpg,
     split_pdf,
     trim_vertical_pdf,
     unprotect_pdf,
 )
 from .scanner import list_scanners, scan_to_pdf
 from .word_tools import pdf_to_word, word_to_pdf
-from .thumbnail_dialogs import MergePagesDialog, PageSelectionDialog
+from .thumbnail_dialogs import MergePagesDialog, PageSelectionDialog, ScanPreviewDialog
 
 
 APP_TITLE = "PDF & Scanner"
@@ -44,6 +49,28 @@ OCR_LANGUAGES = {
     "Português": "por",
     "Português + Inglês": "por+eng",
     "Inglês": "eng",
+}
+DEFAULT_SCAN_PROFILES = {
+    "Documento padrão": {
+        "dpi": "300", "color": "Cinza", "output_format": "PDF", "use_ocr": False,
+        "language": "Português + Inglês", "remove_blank": True, "auto_deskew": True,
+        "auto_orient": True, "source": "",
+    },
+    "Documento colorido": {
+        "dpi": "300", "color": "Cor", "output_format": "PDF", "use_ocr": False,
+        "language": "Português + Inglês", "remove_blank": True, "auto_deskew": True,
+        "auto_orient": True, "source": "",
+    },
+    "Frente e verso": {
+        "dpi": "300", "color": "Cinza", "output_format": "PDF", "use_ocr": False,
+        "language": "Português + Inglês", "remove_blank": True, "auto_deskew": True,
+        "auto_orient": True, "source": "Alimentador superior - frente e verso",
+    },
+    "OCR pesquisável": {
+        "dpi": "300", "color": "Cinza", "output_format": "PDF", "use_ocr": True,
+        "language": "Português + Inglês", "remove_blank": True, "auto_deskew": True,
+        "auto_orient": True, "source": "",
+    },
 }
 
 
@@ -73,9 +100,26 @@ def resource_path(relative: str) -> Path:
     return app_directory() / relative
 
 
+def _read_settings() -> dict:
+    try:
+        value = json.loads((settings_directory() / "configuracao.json").read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return {}
+
+
+def _write_settings(data: dict) -> None:
+    directory = settings_directory()
+    target = directory / "configuracao.json"
+    temporary = target.with_suffix(".tmp")
+    directory.mkdir(parents=True, exist_ok=True)
+    temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(target)
+
+
 def _load_last_scanner_ip() -> str:
     try:
-        data = json.loads((settings_directory() / "configuracao.json").read_text(encoding="utf-8"))
+        data = _read_settings()
         address, _, _ = validate_ip_settings(str(data.get("ultimo_ip_scanner", "")), 80, "http")
         return address
     except (OSError, ValueError, TypeError, json.JSONDecodeError, ESCLScannerError):
@@ -83,21 +127,44 @@ def _load_last_scanner_ip() -> str:
 
 
 def _save_last_scanner_ip(ip_address: str) -> None:
-    directory = settings_directory()
-    target = directory / "configuracao.json"
-    temporary = target.with_suffix(".tmp")
     try:
-        directory.mkdir(parents=True, exist_ok=True)
-        temporary.write_text(
-            json.dumps({"ultimo_ip_scanner": ip_address}, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        temporary.replace(target)
+        data = _read_settings()
+        data["ultimo_ip_scanner"] = ip_address
+        _write_settings(data)
     except OSError:
-        try:
-            temporary.unlink(missing_ok=True)
-        except OSError:
-            pass
+        pass
+
+
+def _load_scan_profiles() -> dict[str, dict]:
+    profiles = {name: dict(values) for name, values in DEFAULT_SCAN_PROFILES.items()}
+    custom = _read_settings().get("perfis_digitalizacao", {})
+    if isinstance(custom, dict):
+        for name, values in custom.items():
+            if isinstance(name, str) and isinstance(values, dict):
+                profiles[name] = values
+    return profiles
+
+
+def _save_scan_profile(name: str, values: dict) -> None:
+    data = _read_settings()
+    profiles = data.setdefault("perfis_digitalizacao", {})
+    if not isinstance(profiles, dict):
+        profiles = {}
+        data["perfis_digitalizacao"] = profiles
+    profiles[name] = values
+    _write_settings(data)
+
+
+def _delete_scan_profile(name: str) -> bool:
+    if name in DEFAULT_SCAN_PROFILES:
+        return False
+    data = _read_settings()
+    profiles = data.get("perfis_digitalizacao", {})
+    if isinstance(profiles, dict) and name in profiles:
+        del profiles[name]
+        _write_settings(data)
+        return True
+    return False
 
 
 class CentralApp(tk.Tk):
@@ -110,6 +177,8 @@ class CentralApp(tk.Tk):
         self.configure(bg="#f4f7fb")
         self._results: queue.Queue[tuple[str, object]] = queue.Queue()
         self._busy = False
+        self._success_callback = None
+        self._error_callback = None
         self._configure_style()
         self._build_ui()
         self._center_main_window()
@@ -180,8 +249,9 @@ class CentralApp(tk.Tk):
             [
                 ("Scanner USB", self.scan),
                 ("Scanner de rede", self.scan_by_ip),
+                ("Testar scanner", self.diagnose_scanners),
             ],
-            columns=2,
+            columns=3,
             primary=True,
         ).pack(fill="x", pady=(0, 12))
         self._build_section(
@@ -247,11 +317,13 @@ class CentralApp(tk.Tk):
     def _save_pdf(self, title: str, suggested: str) -> str:
         return filedialog.asksaveasfilename(parent=self, title=title, defaultextension=".pdf", initialfile=suggested, filetypes=PDF_TYPES)
 
-    def _run(self, label: str, function, *args, **kwargs) -> None:
+    def _run(self, label: str, function, *args, on_success=None, on_error=None, **kwargs) -> None:
         if self._busy:
             messagebox.showinfo(APP_TITLE, "Aguarde a operação atual terminar.", parent=self)
             return
         self._busy = True
+        self._success_callback = on_success
+        self._error_callback = on_error
         self.status.configure(text=label)
         self.progress.start(12)
 
@@ -275,15 +347,29 @@ class CentralApp(tk.Tk):
         self.progress.stop()
         if kind == "ok":
             self.status.configure(text="Operação concluída com sucesso.")
-            display = payload
-            if isinstance(payload, list):
-                display = f"{len(payload)} arquivo(s) criado(s)."
-            if messagebox.askyesno(APP_TITLE, f"Concluído.\n\n{display}\n\nDeseja abrir o local do resultado?", parent=self):
-                self._open_location(payload)
+            callback = self._success_callback
+            self._success_callback = None
+            self._error_callback = None
+            if callback is not None:
+                callback(payload)
+            else:
+                self._show_result(payload)
         else:
+            self._success_callback = None
+            callback = self._error_callback
+            self._error_callback = None
             self.status.configure(text="Não foi possível concluir a operação.")
+            if callback is not None:
+                callback(payload)
             messagebox.showerror(APP_TITLE, str(payload), parent=self)
         self.after(100, self._poll_results)
+
+    def _show_result(self, payload: object) -> None:
+        display = payload
+        if isinstance(payload, list):
+            display = f"{len(payload)} arquivo(s) criado(s)."
+        if messagebox.askyesno(APP_TITLE, f"Concluído.\n\n{display}\n\nDeseja abrir o local do resultado?", parent=self):
+            self._open_location(payload)
 
     def _open_location(self, result: object) -> None:
         if isinstance(result, list) and result:
@@ -455,6 +541,16 @@ class CentralApp(tk.Tk):
         if output:
             self._run("Removendo proteção do PDF...", unprotect_pdf, source, output, dialog.result)
 
+    def diagnose_scanners(self) -> None:
+        self._run(
+            "Testando scanners e OCR...",
+            build_scanner_diagnostic,
+            __version__,
+            app_directory(),
+            _load_last_scanner_ip(),
+            on_success=lambda report: DiagnosticDialog(self, str(report)),
+        )
+
     def scan(self) -> None:
         try:
             devices = list_scanners()
@@ -468,17 +564,15 @@ class CentralApp(tk.Tk):
         self.wait_window(dialog)
         if dialog.result is None:
             return
-        device_id, device_name, serial_number, dpi, color, input_source, output_format, use_ocr, language = dialog.result
+        (
+            device_id, device_name, serial_number, dpi, color, input_source, output_format,
+            use_ocr, language, remove_blank, auto_deskew, auto_orient,
+        ) = dialog.result
         basename = default_scan_basename(serial_number)
-        if output_format == "PDF":
-            output = self._save_pdf("Salvar digitalização", f"{basename}.pdf")
-        else:
-            output = filedialog.askdirectory(parent=self, title="Escolha a pasta para os arquivos JPG")
-        if not output:
-            return
-
+        staging = Path(tempfile.mkdtemp(prefix="pdf_scanner_preview_"))
+        output = staging / "digitalizacao.pdf" if output_format == "PDF" else staging
         self._run(
-            "Digitalizando documento...",
+            "Digitalizando e preparando pré-visualização...",
             scan_to_pdf,
             device_id,
             output,
@@ -491,6 +585,11 @@ class CentralApp(tk.Tk):
             ask_next_page=self._ask_next_page,
             output_format=output_format,
             filename_prefix=basename,
+            remove_blank_pages=remove_blank,
+            auto_deskew=auto_deskew,
+            auto_orient=auto_orient,
+            on_success=lambda result: self._preview_scan_result(result, output_format, basename, staging),
+            on_error=lambda _error: shutil.rmtree(staging, ignore_errors=True),
         )
 
     def _ask_next_page(self, page: int) -> bool:
@@ -514,17 +613,16 @@ class CentralApp(tk.Tk):
         self.wait_window(dialog)
         if dialog.result is None:
             return
-        ip_address, scanner_name, serial_number, port, protocol, dpi, color, input_source, output_format, use_ocr, language = dialog.result
+        (
+            ip_address, scanner_name, serial_number, port, protocol, dpi, color, input_source,
+            output_format, use_ocr, language, remove_blank, auto_deskew, auto_orient,
+        ) = dialog.result
         _save_last_scanner_ip(ip_address)
         basename = default_scan_basename(serial_number)
-        if output_format == "PDF":
-            output = self._save_pdf("Salvar digitalização por IP", f"{basename}.pdf")
-        else:
-            output = filedialog.askdirectory(parent=self, title="Escolha a pasta para os arquivos JPG")
-        if not output:
-            return
+        staging = Path(tempfile.mkdtemp(prefix="pdf_scanner_preview_"))
+        output = staging / "digitalizacao.pdf" if output_format == "PDF" else staging
         self._run(
-            f"Conectando ao scanner {ip_address}...",
+            f"Conectando ao scanner {ip_address} e preparando pré-visualização...",
             scan_escl_to_pdf,
             ip_address,
             port,
@@ -539,7 +637,52 @@ class CentralApp(tk.Tk):
             ask_next_page=self._ask_next_page,
             output_format=output_format,
             filename_prefix=basename,
+            remove_blank_pages=remove_blank,
+            auto_deskew=auto_deskew,
+            auto_orient=auto_orient,
+            on_success=lambda result: self._preview_scan_result(result, output_format, basename, staging),
+            on_error=lambda _error: shutil.rmtree(staging, ignore_errors=True),
         )
+
+    def _preview_scan_result(self, result: object, output_format: str, basename: str, staging: Path) -> None:
+        try:
+            if output_format == "PDF":
+                dialog = ScanPreviewDialog(self, pdf_path=Path(str(result)))
+            else:
+                dialog = ScanPreviewDialog(self, image_paths=[Path(value) for value in result])
+            self.wait_window(dialog)
+            if dialog.result is None:
+                shutil.rmtree(staging, ignore_errors=True)
+                self.status.configure(text="Pronto.")
+                return
+            if output_format == "PDF":
+                output = self._save_pdf("Salvar digitalização", f"{basename}.pdf")
+                function = compose_scanned_pdf
+                args = (dialog.result, output)
+                label = "Salvando PDF revisado..."
+            else:
+                output = filedialog.askdirectory(parent=self, title="Escolha a pasta para os arquivos JPG")
+                function = save_preview_images_as_jpg
+                args = (dialog.result, output, basename)
+                label = "Salvando imagens revisadas..."
+            if not output:
+                shutil.rmtree(staging, ignore_errors=True)
+                self.status.configure(text="Pronto.")
+                return
+            self._run(
+                label,
+                function,
+                *args,
+                on_success=lambda payload: self._finish_scanned_result(payload, staging),
+                on_error=lambda _error: shutil.rmtree(staging, ignore_errors=True),
+            )
+        except Exception:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise
+
+    def _finish_scanned_result(self, payload: object, staging: Path) -> None:
+        shutil.rmtree(staging, ignore_errors=True)
+        self._show_result(payload)
 
 
 class BaseDialog(tk.Toplevel):
@@ -785,6 +928,66 @@ class LanguageDialog(BaseDialog):
         self.destroy()
 
 
+class DiagnosticDialog(BaseDialog):
+    def __init__(self, parent: tk.Misc, report: str) -> None:
+        super().__init__(parent, "Diagnóstico do scanner")
+        self.report = report
+        self.resizable(True, True)
+        ttk.Label(
+            self.body,
+            text="Use este relatório para identificar driver, conexão, origem e OCR.",
+            font=("Segoe UI", 10, "bold"),
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
+        self.text = tk.Text(
+            self.body, wrap="word", font=("Consolas", 10), background="white",
+            foreground="#1f2937", padx=10, pady=10,
+        )
+        scroll = ttk.Scrollbar(self.body, orient="vertical", command=self.text.yview)
+        self.text.configure(yscrollcommand=scroll.set)
+        self.text.insert("1.0", report)
+        self.text.configure(state="disabled")
+        self.text.grid(row=1, column=0, sticky="nsew")
+        scroll.grid(row=1, column=1, sticky="ns")
+        self.body.rowconfigure(1, weight=1)
+        self.body.columnconfigure(0, weight=1)
+        actions = ttk.Frame(self.body)
+        actions.grid(row=2, column=0, columnspan=2, sticky="e", pady=(12, 0))
+        ttk.Button(actions, text="Copiar", command=self._copy).pack(side="left")
+        ttk.Button(actions, text="Salvar relatório", command=self._save).pack(side="left", padx=8)
+        ttk.Button(actions, text="Fechar", command=self.destroy).pack(side="left")
+        self.after_idle(lambda: self._show_centered_size(820, 600))
+
+    def _copy(self) -> None:
+        self.clipboard_clear()
+        self.clipboard_append(self.report)
+        messagebox.showinfo(APP_TITLE, "Relatório copiado.", parent=self)
+
+    def _save(self) -> None:
+        target = filedialog.asksaveasfilename(
+            parent=self, title="Salvar diagnóstico", defaultextension=".txt",
+            initialfile=f"diagnostico_scanner_{datetime.now():%Y-%m-%d_%H-%M-%S}.txt",
+            filetypes=[("Arquivo de texto", "*.txt")],
+        )
+        if not target:
+            return
+        try:
+            Path(target).write_text(self.report, encoding="utf-8")
+        except OSError as exc:
+            messagebox.showerror(APP_TITLE, f"Não foi possível salvar o relatório: {exc}", parent=self)
+            return
+        messagebox.showinfo(APP_TITLE, "Relatório salvo com sucesso.", parent=self)
+
+    def _show_centered_size(self, width: int, height: int) -> None:
+        width = min(width, self.winfo_screenwidth() - 80)
+        height = min(height, self.winfo_screenheight() - 100)
+        x = max(0, (self.winfo_screenwidth() - width) // 2)
+        y = max(0, (self.winfo_screenheight() - height) // 2)
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.deiconify()
+        self.lift()
+        self.grab_set()
+
+
 class LicenseDialog(BaseDialog):
     def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent, "Licença de uso")
@@ -941,6 +1144,8 @@ class ScanDialog(BaseDialog):
     def __init__(self, parent: tk.Misc, devices, ocr_available: bool) -> None:
         super().__init__(parent, "Digitalizar documento")
         self.devices = devices
+        self.ocr_available = ocr_available
+        self.profiles = _load_scan_profiles()
         labels = [device.display_name for device in devices]
         fields = (("Scanner", labels), ("Resolução", ("150", "200", "300", "400", "600")), ("Modo", ("Cor", "Cinza", "Preto e branco")))
         self.combos = []
@@ -970,6 +1175,21 @@ class ScanDialog(BaseDialog):
             self.body,
             text="A lista inclui scanners de rede e USB instalados no Windows.",
         ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        self.remove_blank = tk.BooleanVar(value=False)
+        self.auto_deskew = tk.BooleanVar(value=False)
+        self.auto_orient = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self.body, text="Remover páginas em branco automaticamente", variable=self.remove_blank).grid(row=8, column=0, columnspan=2, sticky="w", pady=(10, 2))
+        ttk.Checkbutton(self.body, text="Corrigir inclinação automaticamente", variable=self.auto_deskew).grid(row=9, column=0, columnspan=2, sticky="w", pady=2)
+        ttk.Checkbutton(self.body, text="Detectar e corrigir orientação", variable=self.auto_orient).grid(row=10, column=0, columnspan=2, sticky="w", pady=2)
+        profile_row = ttk.LabelFrame(self.body, text="Perfil de digitalização", padding=8)
+        profile_row.grid(row=11, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        self.profile = ttk.Combobox(profile_row, state="readonly", values=tuple(self.profiles), width=24)
+        self.profile.set("Documento padrão")
+        self.profile.pack(side="left")
+        ttk.Button(profile_row, text="Aplicar", command=self._apply_profile).pack(side="left", padx=5)
+        ttk.Button(profile_row, text="Salvar novo", command=self._save_profile).pack(side="left")
+        ttk.Button(profile_row, text="Excluir", command=self._delete_profile).pack(side="left", padx=(5, 0))
+        self._apply_profile()
         self.buttons(self.accept)
 
     def _scanner_changed(self, _event=None) -> None:
@@ -977,6 +1197,58 @@ class ScanDialog(BaseDialog):
         sources = self.devices[index].sources if index >= 0 else ("Vidro",)
         self.source.configure(values=sources)
         self.source.current(0)
+
+    def _profile_values(self) -> dict:
+        return {
+            "dpi": self.combos[1].get(), "color": self.combos[2].get(),
+            "output_format": self.output_format.get(), "use_ocr": bool(self.ocr.get()),
+            "language": self.language.get(), "source": self.source.get(),
+            "remove_blank": bool(self.remove_blank.get()), "auto_deskew": bool(self.auto_deskew.get()),
+            "auto_orient": bool(self.auto_orient.get()),
+        }
+
+    def _apply_profile(self) -> None:
+        values = self.profiles.get(self.profile.get())
+        if not values:
+            return
+        self.combos[1].set(str(values.get("dpi", "300")))
+        self.combos[2].set(str(values.get("color", "Cor")))
+        self.output_format.set(str(values.get("output_format", "PDF")))
+        self.ocr.set(bool(values.get("use_ocr", False)) and self.ocr_available)
+        language = str(values.get("language", "Português + Inglês"))
+        if language in OCR_LANGUAGES:
+            self.language.set(language)
+        desired_source = str(values.get("source", ""))
+        if desired_source in tuple(self.source["values"]):
+            self.source.set(desired_source)
+        self.remove_blank.set(bool(values.get("remove_blank", False)))
+        self.auto_deskew.set(bool(values.get("auto_deskew", False)))
+        self.auto_orient.set(bool(values.get("auto_orient", False)))
+
+    def _save_profile(self) -> None:
+        name = simpledialog.askstring(APP_TITLE, "Nome do novo perfil:", parent=self)
+        if not name:
+            return
+        name = name.strip()
+        if not name or name in DEFAULT_SCAN_PROFILES:
+            messagebox.showerror(APP_TITLE, "Escolha um nome diferente dos perfis padrão.", parent=self)
+            return
+        try:
+            _save_scan_profile(name, self._profile_values())
+            self.profiles = _load_scan_profiles()
+            self.profile.configure(values=tuple(self.profiles))
+            self.profile.set(name)
+        except OSError as exc:
+            messagebox.showerror(APP_TITLE, f"Não foi possível salvar o perfil: {exc}", parent=self)
+
+    def _delete_profile(self) -> None:
+        name = self.profile.get()
+        if not _delete_scan_profile(name):
+            messagebox.showinfo(APP_TITLE, "Os perfis padrão não podem ser excluídos.", parent=self)
+            return
+        self.profiles = _load_scan_profiles()
+        self.profile.configure(values=tuple(self.profiles))
+        self.profile.set("Documento padrão")
 
     def accept(self) -> None:
         index = self.combos[0].current()
@@ -990,6 +1262,9 @@ class ScanDialog(BaseDialog):
             self.output_format.get(),
             bool(self.ocr.get()) if self.output_format.get() == "PDF" else False,
             OCR_LANGUAGES[self.language.get()],
+            bool(self.remove_blank.get()),
+            bool(self.auto_deskew.get()),
+            bool(self.auto_orient.get()),
         )
         self.destroy()
 
@@ -1003,6 +1278,8 @@ class IPScanDialog(BaseDialog):
 
     def __init__(self, parent: tk.Misc, ocr_available: bool, last_ip: str = "") -> None:
         super().__init__(parent, "Scanner de rede")
+        self.ocr_available = ocr_available
+        self.profiles = _load_scan_profiles()
         self._source_results: queue.Queue[tuple[str, str, object]] = queue.Queue()
         self._detect_after = None
         self._detected_ip = ""
@@ -1054,6 +1331,21 @@ class IPScanDialog(BaseDialog):
             justify="left",
         )
         self.detection_status.grid(row=7, column=0, columnspan=2, sticky="w", pady=(9, 0))
+        self.remove_blank = tk.BooleanVar(value=False)
+        self.auto_deskew = tk.BooleanVar(value=False)
+        self.auto_orient = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self.body, text="Remover páginas em branco automaticamente", variable=self.remove_blank).grid(row=8, column=0, columnspan=2, sticky="w", pady=(10, 2))
+        ttk.Checkbutton(self.body, text="Corrigir inclinação automaticamente", variable=self.auto_deskew).grid(row=9, column=0, columnspan=2, sticky="w", pady=2)
+        ttk.Checkbutton(self.body, text="Detectar e corrigir orientação", variable=self.auto_orient).grid(row=10, column=0, columnspan=2, sticky="w", pady=2)
+        profile_row = ttk.LabelFrame(self.body, text="Perfil de digitalização", padding=8)
+        profile_row.grid(row=11, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        self.profile = ttk.Combobox(profile_row, state="readonly", values=tuple(self.profiles), width=24)
+        self.profile.set("Documento padrão")
+        self.profile.pack(side="left")
+        ttk.Button(profile_row, text="Aplicar", command=self._apply_profile).pack(side="left", padx=5)
+        ttk.Button(profile_row, text="Salvar novo", command=self._save_profile).pack(side="left")
+        ttk.Button(profile_row, text="Excluir", command=self._delete_profile).pack(side="left", padx=(5, 0))
+        self._apply_profile()
         self.ip_address.bind("<KeyRelease>", self._schedule_detection)
         self.bind("<Return>", lambda _event: self.accept())
         self.buttons(self.accept)
@@ -1089,6 +1381,58 @@ class IPScanDialog(BaseDialog):
                 self._source_results.put((address, "error", str(exc)))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _profile_values(self) -> dict:
+        return {
+            "dpi": self.dpi.get(), "color": self.color.get(),
+            "output_format": self.output_format.get(), "use_ocr": bool(self.ocr.get()),
+            "language": self.language.get(), "source": self.source.get(),
+            "remove_blank": bool(self.remove_blank.get()), "auto_deskew": bool(self.auto_deskew.get()),
+            "auto_orient": bool(self.auto_orient.get()),
+        }
+
+    def _apply_profile(self) -> None:
+        values = self.profiles.get(self.profile.get())
+        if not values:
+            return
+        self.dpi.set(str(values.get("dpi", "300")))
+        self.color.set(str(values.get("color", "Cor")))
+        self.output_format.set(str(values.get("output_format", "PDF")))
+        self.ocr.set(bool(values.get("use_ocr", False)) and self.ocr_available)
+        language = str(values.get("language", "Português + Inglês"))
+        if language in OCR_LANGUAGES:
+            self.language.set(language)
+        desired_source = str(values.get("source", ""))
+        if desired_source in tuple(self.source["values"]):
+            self.source.set(desired_source)
+        self.remove_blank.set(bool(values.get("remove_blank", False)))
+        self.auto_deskew.set(bool(values.get("auto_deskew", False)))
+        self.auto_orient.set(bool(values.get("auto_orient", False)))
+
+    def _save_profile(self) -> None:
+        name = simpledialog.askstring(APP_TITLE, "Nome do novo perfil:", parent=self)
+        if not name:
+            return
+        name = name.strip()
+        if not name or name in DEFAULT_SCAN_PROFILES:
+            messagebox.showerror(APP_TITLE, "Escolha um nome diferente dos perfis padrão.", parent=self)
+            return
+        try:
+            _save_scan_profile(name, self._profile_values())
+            self.profiles = _load_scan_profiles()
+            self.profile.configure(values=tuple(self.profiles))
+            self.profile.set(name)
+        except OSError as exc:
+            messagebox.showerror(APP_TITLE, f"Não foi possível salvar o perfil: {exc}", parent=self)
+
+    def _delete_profile(self) -> None:
+        name = self.profile.get()
+        if not _delete_scan_profile(name):
+            messagebox.showinfo(APP_TITLE, "Os perfis padrão não podem ser excluídos.", parent=self)
+            return
+        self.profiles = _load_scan_profiles()
+        self.profile.configure(values=tuple(self.profiles))
+        self.profile.set("Documento padrão")
 
     def _poll_source_results(self) -> None:
         try:
@@ -1139,6 +1483,9 @@ class IPScanDialog(BaseDialog):
             self.output_format.get(),
             bool(self.ocr.get()) if self.output_format.get() == "PDF" else False,
             OCR_LANGUAGES[self.language.get()],
+            bool(self.remove_blank.get()),
+            bool(self.auto_deskew.get()),
+            bool(self.auto_orient.get()),
         )
         self.destroy()
 

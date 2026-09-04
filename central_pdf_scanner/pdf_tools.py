@@ -94,6 +94,26 @@ def merge_pdf_pages(page_refs: Sequence[tuple[str | Path, int]], output_pdf: str
     return _write_pdf(writer, output_pdf)
 
 
+def compose_scanned_pdf(
+    page_refs: Sequence[tuple[str | Path, int, int]], output_pdf: str | Path
+) -> Path:
+    """Salva páginas da pré-visualização na ordem e rotação escolhidas."""
+    if not page_refs:
+        raise PDFToolError("Mantenha ao menos uma página na digitalização.")
+    readers: dict[Path, PdfReader] = {}
+    writer = PdfWriter()
+    for source_value, index, rotation in page_refs:
+        source = _ensure_pdf(source_value)
+        reader = readers.setdefault(source, PdfReader(str(source)))
+        if index < 0 or index >= len(reader.pages):
+            raise PDFToolError(f"A página {index + 1} não existe em {source.name}.")
+        page = reader.pages[index]
+        if rotation:
+            page.rotate(rotation)
+        writer.add_page(page)
+    return _write_pdf(writer, output_pdf)
+
+
 def split_pdf(input_pdf: str | Path, output_dir: str | Path, page_spec: str = "") -> list[Path]:
     """Cria um PDF para cada intervalo, como ``1-3,4-6,7-10``."""
     source = _ensure_pdf(input_pdf)
@@ -267,6 +287,27 @@ def save_images_as_jpg(
                 image.convert("RGB").save(target, "JPEG", quality=94)
         except Exception:
             shutil.copy2(source, target)
+        outputs.append(target)
+    return outputs
+
+
+def save_preview_images_as_jpg(
+    page_refs: Sequence[tuple[str | Path, int, int]], output_dir: str | Path, filename_prefix: str
+) -> list[Path]:
+    """Salva imagens após reordenação, exclusão e rotação na pré-visualização."""
+    if not page_refs:
+        raise PDFToolError("Mantenha ao menos uma página na digitalização.")
+    destination = Path(output_dir)
+    destination.mkdir(parents=True, exist_ok=True)
+    outputs: list[Path] = []
+    for position, (source_value, _index, rotation) in enumerate(page_refs, 1):
+        source = Path(source_value)
+        target = destination / f"{filename_prefix}_pagina_{position:03d}.jpg"
+        with Image.open(source) as opened:
+            image = opened.convert("RGB")
+            if rotation:
+                image = image.rotate(-rotation, expand=True, fillcolor="white")
+            image.save(target, "JPEG", quality=94)
         outputs.append(target)
     return outputs
 
