@@ -1,8 +1,8 @@
 # PDF & Scanner
 
-Versão atual: 2.5.7
+Versão atual: 2.5.8
 
-Esta versão faz a janela principal abrir centralizada e ajustada ao tamanho da tela, mantendo os reforços de segurança da versão anterior.
+Esta versão corrige a compatibilidade do endereço de trabalho de digitalização retornado por multifuncionais Lexmark, mantendo a validação de segurança da rede.
 
 Também oferece Word editável compatível com LibreOffice, OCR executado silenciosamente em segundo plano e instalador para Windows.
 
@@ -51,7 +51,7 @@ Depois de extraído, o pacote abre por `CentralPDFScanner.exe` sem instalar Pyth
 
 ## Gerar o instalador do Windows
 
-O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.5.7.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
+O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.5.8.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
 
 ## Digitalizar digitando o IP
 

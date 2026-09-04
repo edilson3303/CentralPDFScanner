@@ -184,9 +184,14 @@ def _scan_settings(dpi: int, color_mode: str, input_source: str = "Platen") -> b
 
 
 def _job_url(base: str, location: str) -> str:
-    parsed = urllib.parse.urlparse(urllib.parse.urljoin(base + "/", location))
+    cleaned_location = location.strip().strip("<>\"'")
+    parsed = urllib.parse.urlparse(urllib.parse.urljoin(base + "/", cleaned_location))
     path = parsed.path.rstrip("/")
-    if not path.startswith(SCAN_JOBS_PATH + "/"):
+    normalized_path = path.casefold()
+    normalized_root = SCAN_JOBS_PATH.casefold()
+    # Alguns modelos Lexmark devolvem o próprio /eSCL/ScanJobs, sem um
+    # identificador adicional, ou alteram a capitalização do caminho.
+    if normalized_path != normalized_root and not normalized_path.startswith(normalized_root + "/"):
         raise ESCLScannerError("A multifuncional devolveu um endereço de trabalho inválido.")
     # Alguns equipamentos devolvem seu nome DNS no Location. Mantemos o caminho,
     # mas usamos o IP informado para evitar falha de resolução desse nome local.

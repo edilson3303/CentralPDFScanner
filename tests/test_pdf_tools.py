@@ -266,6 +266,16 @@ class PDFToolsTests(unittest.TestCase):
         with self.assertRaisesRegex(ESCLScannerError, "trabalho inválido"):
             _job_url("http://192.168.1.50:80", "http://example.com/outro/caminho")
 
+    def test_escl_accepts_lexmark_job_location_variants(self) -> None:
+        from central_pdf_scanner.escl_scanner import _job_url
+
+        base = "http://192.168.1.50:80"
+        self.assertEqual(_job_url(base, "/eSCL/ScanJobs"), base + "/eSCL/ScanJobs")
+        self.assertEqual(
+            _job_url(base, "http://lexmark.local/ESCL/SCANJOBS/123/"),
+            base + "/ESCL/SCANJOBS/123",
+        )
+
     def test_escl_probe_and_scan_to_pdf(self) -> None:
         server = ThreadingHTTPServer(("127.0.0.1", 0), FakeESCLHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
