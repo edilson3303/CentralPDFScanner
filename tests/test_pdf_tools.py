@@ -75,6 +75,11 @@ class FakeESCLHandler(BaseHTTPRequestHandler):
             self.wfile.write(content)
             return
         if self.path == "/eSCL/ScanJobs/1/NextDocument":
+            busy_responses = getattr(self.server, "document_busy_responses", 0)  # type: ignore[attr-defined]
+            if busy_responses:
+                self.server.document_busy_responses = busy_responses - 1  # type: ignore[attr-defined]
+                self.send_error(503)
+                return
             count = getattr(self.server, "documents_sent", 0)  # type: ignore[attr-defined]
             available = getattr(self.server, "documents_available", 1)  # type: ignore[attr-defined]
             if count >= available:
@@ -108,6 +113,14 @@ class FakeESCLHandler(BaseHTTPRequestHandler):
         self.send_header("Location", "/eSCL/ScanJobs/1")
         self.send_header("Content-Length", "0")
         self.end_headers()
+
+    def do_DELETE(self) -> None:
+        if self.path == "/eSCL/ScanJobs/1":
+            self.server.job_released = True  # type: ignore[attr-defined]
+            self.send_response(204)
+            self.end_headers()
+            return
+        self.send_error(404)
 
 
 class PDFToolsTests(unittest.TestCase):
@@ -309,6 +322,27 @@ class PDFToolsTests(unittest.TestCase):
             self.assertIn(b"300", settings)
             self.assertIn(b"Feeder", settings)
             self.assertIn(b"<scan:Duplex>true</scan:Duplex>", settings)
+            self.assertTrue(server.job_released)  # type: ignore[attr-defined]
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_escl_platen_waits_for_temporary_busy_response(self) -> None:
+        server = ThreadingHTTPServer(("127.0.0.1", 0), FakeESCLHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = server.server_address[1]
+            server.document_busy_responses = 2  # type: ignore[attr-defined]
+            output = scan_escl_to_pdf(
+                "127.0.0.1",
+                port,
+                "http",
+                self.root / "vidro.pdf",
+                input_source="Platen",
+            )
+            self.assertTrue(output.is_file())
+            self.assertTrue(server.job_released)  # type: ignore[attr-defined]
         finally:
             server.shutdown()
             server.server_close()

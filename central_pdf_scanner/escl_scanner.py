@@ -213,7 +213,7 @@ def _create_scan_job(
         method="POST",
     )
     opener = _opener(protocol)
-    for attempt in range(6):
+    for attempt in range(15):
         try:
             with opener.open(request, timeout=timeout) as response:
                 location = response.headers.get("Location", "")
@@ -221,8 +221,8 @@ def _create_scan_job(
                 raise ESCLScannerError("A multifuncional não informou o endereço do trabalho de digitalização.")
             return opener, _job_url(base, location)
         except urllib.error.HTTPError as exc:
-            if exc.code in (409, 503) and attempt < 5:
-                time.sleep(0.7)
+            if exc.code in (409, 503) and attempt < 14:
+                time.sleep(1.0)
                 continue
             raise _friendly_network_error(exc) from exc
         except ESCLScannerError:
@@ -244,7 +244,9 @@ def _next_document(
         headers={"Accept": "image/jpeg, image/png, image/tiff, application/pdf"},
         method="GET",
     )
-    for attempt in range(6):
+    # O vidro pode levar vários segundos para aquecer e preparar a primeira
+    # página. Nesse período, Lexmark e outros fabricantes respondem 409/503.
+    for attempt in range(45):
         try:
             with opener.open(request, timeout=timeout) as response:
                 data = response.read(MAX_DOCUMENT_BYTES + 1)
@@ -254,15 +256,32 @@ def _next_document(
         except urllib.error.HTTPError as exc:
             if allow_end and exc.code in (404, 410):
                 return None
-            if allow_end and exc.code in (409, 503):
-                if attempt < 5:
-                    time.sleep(0.5)
+            if exc.code in (409, 503):
+                if attempt < 44:
+                    time.sleep(1.0)
                     continue
-                return None
+                if allow_end:
+                    return None
             raise _friendly_network_error(exc) from exc
         except (OSError, urllib.error.URLError) as exc:
             raise _friendly_network_error(exc) from exc
     return None
+
+
+def _release_scan_job(opener: urllib.request.OpenerDirector, job_url: str, timeout: int = 8) -> None:
+    """Libera trabalhos específicos sem cancelar a fila compartilhada do equipamento."""
+    path = urllib.parse.urlparse(job_url).path.rstrip("/")
+    if path.casefold() == SCAN_JOBS_PATH.casefold():
+        return
+    request = urllib.request.Request(job_url, method="DELETE")
+    try:
+        with opener.open(request, timeout=timeout):
+            pass
+    except urllib.error.HTTPError as exc:
+        if exc.code not in (404, 405, 409, 410, 501):
+            return
+    except (OSError, urllib.error.URLError):
+        return
 
 
 def _document_to_images(data: bytes, content_type: str, destination: Path, page_start: int, dpi: int) -> list[Path]:
@@ -322,24 +341,30 @@ def scan_escl_to_pdf(
         scanned_pages = 0
         if input_source in {"Feeder", "FeederDuplex"}:
             opener, job_url = _create_scan_job(base, protocol, dpi, color_mode, input_source, timeout=180)
-            while scanned_pages < MAX_SCAN_PAGES:
-                document = _next_document(opener, job_url, timeout=180, allow_end=True)
-                if document is None:
-                    break
-                data, content_type = document
-                new_images = _document_to_images(data, content_type, directory, scanned_pages + 1, dpi)
-                images.extend(new_images)
-                scanned_pages += len(new_images)
+            try:
+                while scanned_pages < MAX_SCAN_PAGES:
+                    document = _next_document(opener, job_url, timeout=180, allow_end=True)
+                    if document is None:
+                        break
+                    data, content_type = document
+                    new_images = _document_to_images(data, content_type, directory, scanned_pages + 1, dpi)
+                    images.extend(new_images)
+                    scanned_pages += len(new_images)
+            finally:
+                _release_scan_job(opener, job_url)
         else:
             while True:
                 opener, job_url = _create_scan_job(base, protocol, dpi, color_mode, input_source, timeout=180)
-                document = _next_document(opener, job_url, timeout=180)
-                if document is None:
-                    break
-                data, content_type = document
-                new_images = _document_to_images(data, content_type, directory, scanned_pages + 1, dpi)
-                images.extend(new_images)
-                scanned_pages += len(new_images)
+                try:
+                    document = _next_document(opener, job_url, timeout=180)
+                    if document is None:
+                        break
+                    data, content_type = document
+                    new_images = _document_to_images(data, content_type, directory, scanned_pages + 1, dpi)
+                    images.extend(new_images)
+                    scanned_pages += len(new_images)
+                finally:
+                    _release_scan_job(opener, job_url)
                 if ask_next_page is None or not ask_next_page(scanned_pages):
                     break
         if not images:
