@@ -1,6 +1,6 @@
 # PDF & Scanner
 
-Versão atual: 2.8.0
+Versão atual: 2.8.1
 
 Esta versão redimensiona automaticamente a pré-visualização de Juntar PDFs, permite selecionar várias páginas com Ctrl e Shift, cadastra vários scanners de rede e restringe as configurações a credenciais administrativas do computador ou do Active Directory.
 
@@ -65,7 +65,7 @@ Depois de extraído, o pacote abre por `CentralPDFScanner.exe` sem instalar Pyth
 
 ## Gerar o instalador do Windows
 
-O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.8.0.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
+O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.8.1.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
 
 ## Cadastrar e usar scanners de rede
 

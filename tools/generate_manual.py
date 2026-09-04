@@ -71,7 +71,7 @@ def mock_screen(title: str, kind: str) -> BytesIO:
         draw.rectangle((35, 125, 1365, 170), fill="#dce8f5")
         draw.text((55, 137), "Nome", font=font(18, True), fill=TEXT)
         draw.text((940, 137), "Endereço IP", font=font(18, True), fill=TEXT)
-        rows = [("Lexmark - Protocolo", "10.40.10.8"), ("Scanner - Recursos Humanos", "10.40.10.25")]
+        rows = [("Scanner de rede 1", "IP oculto"), ("Scanner de rede 2", "IP oculto")]
         for idx, (name, address) in enumerate(rows):
             y = 190 + idx * 55
             draw.text((55, y), name, font=font(18), fill=TEXT)
@@ -79,7 +79,7 @@ def mock_screen(title: str, kind: str) -> BytesIO:
             draw.line((35, y + 38, 1365, y + 38), fill="#d6dee8")
         for idx, label in enumerate(("Adicionar", "Editar", "Remover")):
             button((35 + idx * 175, 375, 190 + idx * 175, 425), label)
-        fields = [("Pasta padrão", r"C:\Digitalizações"), ("Modelo do nome", "Scan_{serie}_{data}_{hora}_{setor}"), ("Setor", "Protocolo")]
+        fields = [("Pasta padrão", r"C:\Digitalizações"), ("Modelo do nome", "Scan_{serie}_{data}_{hora}_{setor}"), ("Setor", "SETOR")]
         for idx, (label, value) in enumerate(fields):
             y = 485 + idx * 68
             draw.text((40, y), label, font=font(18, True), fill=TEXT)
@@ -89,7 +89,7 @@ def mock_screen(title: str, kind: str) -> BytesIO:
         button((1270, 745, 1380, 797), "Cancelar")
     elif kind == "scan":
         labels = ["Scanner cadastrado", "Resolução", "Modo", "Origem", "Formato de saída", "Idioma OCR"]
-        values = ["Lexmark - Protocolo - 10.40.10.8", "300", "Cor", "Alimentador superior - frente e verso", "PDF", "Português + Inglês"]
+        values = ["Scanner de rede 1 - IP oculto", "300", "Cor", "Alimentador superior - frente e verso", "PDF", "Português + Inglês"]
         for idx, (label, value) in enumerate(zip(labels, values)):
             y = 100 + idx * 72
             draw.text((120, y), label, font=font(19, True), fill=TEXT)
@@ -145,7 +145,7 @@ def mock_screen(title: str, kind: str) -> BytesIO:
         draw.text((115, 535), "Os documentos não são enviados para a internet.", font=font(20, True), fill=BLUE)
     buffer = BytesIO()
     image = image.resize((1000, 586), PILImage.Resampling.LANCZOS)
-    image.save(buffer, "JPEG", quality=72, optimize=True, progressive=True)
+    image.save(buffer, "JPEG", quality=66, optimize=True, progressive=True)
     buffer.seek(0)
     return buffer
 
@@ -188,7 +188,7 @@ def build_manual() -> None:
         Paragraph("MANUAL DO USUÁRIO", styles["ManualTitle"]),
         Paragraph("PDF & Scanner - Assembleia Legislativa do Estado do Amapá - ALAP", styles["ManualTitle"]),
         Spacer(1, 1.5 * cm),
-        Paragraph("Versão 2.8.0 | Processamento local de documentos", ParagraphStyle(name="Cover", parent=body, alignment=TA_CENTER, fontSize=13)),
+        Paragraph("Versão 2.8.1 | Processamento local de documentos", ParagraphStyle(name="Cover", parent=body, alignment=TA_CENTER, fontSize=13)),
         PageBreak(),
     ])
 

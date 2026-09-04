@@ -39,7 +39,7 @@ from .pdf_tools import (
 )
 from .scanner import list_scanners, scan_to_pdf
 from .progress import OperationCancelled
-from .security import is_process_elevated, launch_elevated_settings
+from .security import is_process_elevated, is_windows_administrator, launch_elevated_settings
 from .word_tools import pdf_to_word, word_to_pdf
 from .thumbnail_dialogs import MergePagesDialog, PageSelectionDialog, ScanPreviewDialog
 
@@ -981,7 +981,10 @@ class BaseDialog(tk.Toplevel):
         self.withdraw()
         self.title(title)
         self.resizable(False, False)
-        self.transient(parent)
+        # Uma janela transient ligada a uma raiz oculta pode não aparecer no
+        # Windows. Isso ocorre no processo elevado que abre as configurações.
+        if parent.winfo_viewable():
+            self.transient(parent)
         self.result = None
         self.body = ttk.Frame(self, padding=20)
         self.body.pack(fill="both", expand=True)
@@ -2149,10 +2152,15 @@ def _run_administrative_settings() -> None:
             root.iconbitmap(default=str(ico_icon))
     except tk.TclError:
         pass
-    if sys.platform == "win32" and not is_process_elevated():
+    if (
+        sys.platform == "win32"
+        and not is_process_elevated()
+        and not is_windows_administrator()
+    ):
         messagebox.showerror(
             APP_TITLE,
-            "As configurações somente podem ser alteradas com credenciais administrativas.",
+            "As configurações somente podem ser alteradas por um administrador local "
+            "ou do Active Directory.",
             parent=root,
         )
         root.destroy()
