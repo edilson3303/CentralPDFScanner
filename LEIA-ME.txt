@@ -1,4 +1,4 @@
-PDF & SCANNER 2.5.4
+PDF & SCANNER 2.5.5
 =================
 
 COMO ABRIR A VERSAO PORTATIL
@@ -72,3 +72,4 @@ PRIVACIDADE
 
 JANELAS
 - As janelas internas abertas pelos botoes aparecem centralizadas na tela.
+- A janela Scanner de rede se reajusta apos a deteccao, sem cortar a mensagem nem os botoes.
