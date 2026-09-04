@@ -1,4 +1,4 @@
-PDF & SCANNER 2.7.2
+PDF & SCANNER 2.7.3
 =================
 
 COMO ABRIR A VERSAO PORTATIL
@@ -71,7 +71,8 @@ CONVERSOES WORD
 EDICAO VISUAL
 - Remover, juntar, dividir, girar e cortar margens exibem miniaturas das paginas.
 - Em Dividir PDF, informe grupos como 1-3,4-6,7-10; cada intervalo gera um arquivo.
-- Em Juntar PDFs, as paginas aparecem em grade, com rolagem vertical.
+- Em Juntar PDFs, as paginas aparecem em grade responsiva, com rolagem vertical.
+- Use Ctrl+clique para escolher paginas separadas e Shift+clique para selecionar um intervalo.
 - O corte superior/inferior e informado em centimetros.
 
 NOME E FORMATO DA DIGITALIZACAO

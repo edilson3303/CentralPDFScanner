@@ -48,6 +48,7 @@ from central_pdf_scanner.diagnostics import build_scanner_diagnostic
 from central_pdf_scanner.advanced_pdf import _find_libreoffice, compact_pdf, convert_pdf_to_pdfa, separate_pdf_batch
 from central_pdf_scanner.progress import OperationCancelled
 from central_pdf_scanner.app import default_scan_basename
+from central_pdf_scanner.thumbnail_dialogs import selection_after_click
 from central_pdf_scanner.word_tools import word_to_pdf
 from docx import Document
 
@@ -146,6 +147,14 @@ class PDFToolsTests(unittest.TestCase):
         with self.assertRaises(PDFToolError):
             parse_page_spec("4-2", 5)
 
+    def test_thumbnail_ctrl_and_shift_selection(self) -> None:
+        selected, anchor = selection_after_click(set(), 2, None, ctrl=False, shift=False)
+        self.assertEqual(selected, {2})
+        selected, anchor = selection_after_click(selected, 4, anchor, ctrl=True, shift=False)
+        self.assertEqual(selected, {2, 4})
+        selected, anchor = selection_after_click(selected, 7, anchor, ctrl=False, shift=True)
+        self.assertEqual(selected, {4, 5, 6, 7})
+
     def test_parse_split_intervals(self) -> None:
         self.assertEqual(parse_split_intervals("1-2,3,4-5", 5), [[0, 1], [2], [3, 4]])
         with self.assertRaises(PDFToolError):
@@ -234,8 +243,8 @@ class PDFToolsTests(unittest.TestCase):
         self.assertEqual(image.read_bytes(), original)
 
     def test_scanner_diagnostic_does_not_require_a_scanner(self) -> None:
-        report = build_scanner_diagnostic("2.7.2", self.root)
-        self.assertIn("Versão do software: 2.7.2", report)
+        report = build_scanner_diagnostic("2.7.3", self.root)
+        self.assertIn("Versão do software: 2.7.3", report)
         self.assertIn("SCANNERS INSTALADOS NO WINDOWS", report)
         self.assertIn("não contém imagens nem conteúdo", report)
 

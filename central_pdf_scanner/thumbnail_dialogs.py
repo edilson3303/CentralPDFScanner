@@ -9,6 +9,23 @@ import fitz
 from PIL import Image, ImageTk
 
 
+def selection_after_click(
+    current: set[int], position: int, anchor: int | None, *, ctrl: bool, shift: bool
+) -> tuple[set[int], int]:
+    """Aplica a seleção comum do Windows: clique, Ctrl+clique e Shift+clique."""
+    if shift and anchor is not None:
+        interval = set(range(min(anchor, position), max(anchor, position) + 1))
+        return ((current | interval) if ctrl else interval), anchor
+    if ctrl:
+        selected = set(current)
+        if position in selected:
+            selected.remove(position)
+        else:
+            selected.add(position)
+        return selected, position
+    return {position}, position
+
+
 class ThumbnailDialog(tk.Toplevel):
     """Janela visual centralizada para escolher paginas de PDF."""
 
@@ -192,7 +209,8 @@ class MergePagesDialog(ThumbnailDialog):
         super().__init__(parent, "Juntar PDFs - organize as paginas")
         self.refs: list[tuple[str, int]] = []
         self.photos: list[ImageTk.PhotoImage] = []
-        self.selected = 0
+        self.selected_indices: set[int] = {0}
+        self.selection_anchor: int | None = 0
         for source in sources:
             document = fitz.open(source)
             try:
@@ -204,7 +222,7 @@ class MergePagesDialog(ThumbnailDialog):
 
         ttk.Label(
             self,
-            text="Clique numa miniatura e use os botoes para alterar a ordem ou remover da uniao.",
+            text="Selecione páginas com clique, Ctrl+clique ou Shift+clique. Depois, altere a ordem ou remova.",
             padding=(16, 12),
             font=("Segoe UI", 10, "bold"),
         ).pack(fill="x")
@@ -213,6 +231,8 @@ class MergePagesDialog(ThumbnailDialog):
         ttk.Button(tools, text="Mover antes", command=lambda: self.move(-1)).pack(side="left")
         ttk.Button(tools, text="Mover depois", command=lambda: self.move(1)).pack(side="left", padx=6)
         ttk.Button(tools, text="Remover da uniao", command=self.remove).pack(side="left")
+        self.summary = ttk.Label(tools, text="")
+        self.summary.pack(side="right")
 
         container = ttk.Frame(self)
         container.pack(fill="both", expand=True, padx=16)
@@ -225,6 +245,7 @@ class MergePagesDialog(ThumbnailDialog):
         self.canvas.pack(side="left", fill="both", expand=True)
         vertical.pack(side="right", fill="y")
         self.canvas.bind_all("<MouseWheel>", lambda e: self.canvas.yview_scroll(int(-e.delta / 120), "units"))
+        self.canvas.bind("<Configure>", lambda e: self._layout_buttons(e.width))
         self.buttons: list[tk.Button] = []
         self.redraw()
 
@@ -232,47 +253,96 @@ class MergePagesDialog(ThumbnailDialog):
         footer.pack(fill="x")
         ttk.Button(footer, text="Cancelar", command=self.destroy).pack(side="right")
         ttk.Button(footer, text="Juntar", command=self.accept).pack(side="right", padx=8)
-        self.after_idle(lambda: self.show_centered(980, 700))
+        self.after_idle(self._show_responsive)
+
+    def _show_responsive(self) -> None:
+        width = min(1180, self.winfo_screenwidth() - 60)
+        height = min(780, self.winfo_screenheight() - 80)
+        self.show_centered(width, height)
+        self.after_idle(lambda: self._layout_buttons(self.canvas.winfo_width()))
+
+    def _layout_buttons(self, available_width: int) -> None:
+        columns = max(1, min(6, (max(180, available_width) - 20) // 180))
+        for position, button in enumerate(self.buttons):
+            button.grid_configure(
+                row=position // columns,
+                column=position % columns,
+                padx=10,
+                pady=10,
+                sticky="n",
+            )
 
     def redraw(self) -> None:
         for widget in self.grid.winfo_children():
             widget.destroy()
         self.buttons.clear()
-        self.selected = min(self.selected, max(0, len(self.refs) - 1))
+        self.selected_indices = {index for index in self.selected_indices if index < len(self.refs)}
+        if self.refs and not self.selected_indices:
+            self.selected_indices = {min(self.selection_anchor or 0, len(self.refs) - 1)}
         for position, ((source, page_index), photo) in enumerate(zip(self.refs, self.photos)):
             button = tk.Button(
                 self.grid,
                 image=photo,
                 text=f"{position + 1}. {Path(source).name}\nPagina {page_index + 1}",
                 compound="top",
-                bg="#93c5fd" if position == self.selected else "white",
+                bg="#93c5fd" if position in self.selected_indices else "white",
                 relief="solid",
                 bd=2,
                 padx=5,
                 pady=5,
-                command=lambda value=position: self.choose(value),
             )
-            button.grid(row=position // 5, column=position % 5, padx=10, pady=10, sticky="n")
+            button.bind("<Button-1>", lambda event, value=position: self.choose(event, value))
             self.buttons.append(button)
+        self._layout_buttons(self.canvas.winfo_width())
+        self.summary.configure(
+            text=f"{len(self.selected_indices)} selecionada(s) de {len(self.refs)} página(s)"
+        )
 
-    def choose(self, position: int) -> None:
-        self.selected = position
+    def choose(self, event: tk.Event, position: int) -> str:
+        self.selected_indices, self.selection_anchor = selection_after_click(
+            self.selected_indices,
+            position,
+            self.selection_anchor,
+            ctrl=bool(event.state & 0x0004),
+            shift=bool(event.state & 0x0001),
+        )
         self.redraw()
+        return "break"
 
     def move(self, change: int) -> None:
-        target = self.selected + change
-        if target < 0 or target >= len(self.refs):
+        if not self.selected_indices:
             return
-        self.refs[self.selected], self.refs[target] = self.refs[target], self.refs[self.selected]
-        self.photos[self.selected], self.photos[target] = self.photos[target], self.photos[self.selected]
-        self.selected = target
+        selected = set(self.selected_indices)
+        if change < 0:
+            for index in sorted(selected):
+                if index > 0 and index - 1 not in selected:
+                    self.refs[index - 1], self.refs[index] = self.refs[index], self.refs[index - 1]
+                    self.photos[index - 1], self.photos[index] = self.photos[index], self.photos[index - 1]
+                    selected.remove(index)
+                    selected.add(index - 1)
+        else:
+            for index in sorted(selected, reverse=True):
+                if index < len(self.refs) - 1 and index + 1 not in selected:
+                    self.refs[index + 1], self.refs[index] = self.refs[index], self.refs[index + 1]
+                    self.photos[index + 1], self.photos[index] = self.photos[index], self.photos[index + 1]
+                    selected.remove(index)
+                    selected.add(index + 1)
+        self.selected_indices = selected
+        self.selection_anchor = min(selected) if selected else None
         self.redraw()
 
     def remove(self) -> None:
-        if len(self.refs) <= 1:
+        if not self.selected_indices:
             return
-        self.refs.pop(self.selected)
-        self.photos.pop(self.selected)
+        if len(self.selected_indices) >= len(self.refs):
+            messagebox.showwarning("PDF & Scanner", "A união deve manter pelo menos uma página.", parent=self)
+            return
+        first = min(self.selected_indices)
+        for index in sorted(self.selected_indices, reverse=True):
+            self.refs.pop(index)
+            self.photos.pop(index)
+        self.selection_anchor = min(first, len(self.refs) - 1)
+        self.selected_indices = {self.selection_anchor}
         self.redraw()
 
     def accept(self) -> None:

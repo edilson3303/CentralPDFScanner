@@ -1,8 +1,8 @@
 # PDF & Scanner
 
-Versão atual: 2.7.2
+Versão atual: 2.7.3
 
-Esta versão padroniza a pré-visualização de Juntar PDFs em uma grade de páginas com rolagem vertical. Também acelera a digitalização comum, evitando OCR de orientação e recodificação de imagem desnecessários.
+Esta versão torna a pré-visualização de Juntar PDFs responsiva e permite selecionar várias páginas com Ctrl e Shift. Também acelera a digitalização comum, evitando OCR de orientação e recodificação de imagem desnecessários.
 
 Também oferece progresso detalhado com cancelamento, PDF/A-2b, compactação, separação automática de lotes e pasta/nomenclatura configuráveis.
 
@@ -62,7 +62,7 @@ Depois de extraído, o pacote abre por `CentralPDFScanner.exe` sem instalar Pyth
 
 ## Gerar o instalador do Windows
 
-O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.7.2.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
+O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.7.3.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
 
 ## Digitalizar digitando o IP
 
