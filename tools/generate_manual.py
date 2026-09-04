@@ -178,7 +178,7 @@ def build_manual() -> None:
             story.append(Paragraph(f"<b>Atenção:</b> {tip}", styles["ManualTip"]))
         story.append(PageBreak())
 
-    icon = ROOT / "assets" / "pdf_scanner_feather.png"
+    icon = ROOT / "assets" / "pdf_scanner_multifuncional_v282.png"
     logo = ROOT / "assets" / "logo_assembleia_legislativa_amapa.png"
     if logo.is_file():
         story.extend([Image(str(logo), width=12 * cm, height=2.75 * cm), Spacer(1, 1.1 * cm)])
@@ -188,7 +188,7 @@ def build_manual() -> None:
         Paragraph("MANUAL DO USUÁRIO", styles["ManualTitle"]),
         Paragraph("PDF & Scanner - Assembleia Legislativa do Estado do Amapá - ALAP", styles["ManualTitle"]),
         Spacer(1, 1.5 * cm),
-        Paragraph("Versão 2.8.1 | Processamento local de documentos", ParagraphStyle(name="Cover", parent=body, alignment=TA_CENTER, fontSize=13)),
+        Paragraph("Versão 2.8.2 | Processamento local de documentos", ParagraphStyle(name="Cover", parent=body, alignment=TA_CENTER, fontSize=13)),
         PageBreak(),
     ])
 

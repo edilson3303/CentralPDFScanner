@@ -1,10 +1,10 @@
-PDF & SCANNER 2.8.1
+PDF & SCANNER 2.8.2
 =================
 
 COMO ABRIR A VERSÃO PORTÁTIL
 1. Extraia todo o arquivo CentralPDFScanner_Portable.zip.
 2. Abra a pasta extraída.
-3. Execute CentralPDFScanner.exe.
+3. Execute PDFScannerALAP.exe.
 4. Não mova apenas o EXE: mantenha toda a pasta junta.
 
 MANUAL

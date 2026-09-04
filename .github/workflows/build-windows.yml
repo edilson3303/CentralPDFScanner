@@ -42,14 +42,14 @@ jobs:
           Invoke-WebRequest -Uri "https://github.com/tesseract-ocr/tessdata_fast/raw/87416418657359cb625c412a48b6e1d6d41c29bd/por.traineddata" -OutFile "$tessdata\por.traineddata"
       - name: Gerar executavel
         run: |
-          pyinstaller --noconfirm --clean --windowed --name CentralPDFScanner --icon "assets\pdf_scanner_feather.ico" --add-data "assets\logo_assembleia_legislativa_amapa.png;assets" --add-data "assets\pdf_scanner_feather.png;assets" --add-data "assets\pdf_scanner_feather.ico;assets" --collect-all fitz --collect-all pypdf --collect-all pdf2docx --hidden-import cv2 --hidden-import win32com.client app.py
-          Rename-Item dist\CentralPDFScanner CentralPDFScanner_Portable
+          pyinstaller --noconfirm --clean --windowed --name PDFScannerALAP --icon "assets\pdf_scanner_multifuncional_v282.ico" --add-data "assets\logo_assembleia_legislativa_amapa.png;assets" --add-data "assets\pdf_scanner_multifuncional_v282.png;assets" --add-data "assets\pdf_scanner_multifuncional_v282.ico;assets" --collect-all fitz --collect-all pypdf --collect-all pdf2docx --hidden-import cv2 --hidden-import win32com.client app.py
+          Rename-Item dist\PDFScannerALAP CentralPDFScanner_Portable
           New-Item -ItemType Directory -Force -Path dist\CentralPDFScanner_Portable\engines\tesseract
           Copy-Item "C:\Program Files\Tesseract-OCR\*" dist\CentralPDFScanner_Portable\engines\tesseract -Recurse -Force
           Copy-Item LEIA-ME.txt dist\CentralPDFScanner_Portable\LEIA-ME.txt
           Copy-Item LICENCA.txt dist\CentralPDFScanner_Portable\LICENCA.txt
           Copy-Item MANUAL_DO_USUARIO.pdf dist\CentralPDFScanner_Portable\MANUAL_DO_USUARIO.pdf
-          Copy-Item assets\pdf_scanner_feather.ico dist\CentralPDFScanner_Portable\pdf_scanner_feather.ico
+          Copy-Item assets\pdf_scanner_multifuncional_v282.ico dist\CentralPDFScanner_Portable\pdf_scanner_multifuncional_v282.ico
           Compress-Archive -Path dist\CentralPDFScanner_Portable\* -DestinationPath dist\CentralPDFScanner_Portable.zip
       - name: Gerar instalador do Windows
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
@@ -62,4 +62,4 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: PDF_Scanner_ALAP_Instalador_Windows
-          path: dist/installer/PDF_Scanner_ALAP_Setup_v2.8.1.exe
+          path: dist/installer/PDF_Scanner_ALAP_Setup_v2.8.2.exe

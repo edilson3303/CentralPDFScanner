@@ -19,13 +19,13 @@ if errorlevel 1 goto :error
 if errorlevel 1 goto :error
 
 if exist build rmdir /s /q build
-if exist "dist\CentralPDFScanner" rmdir /s /q "dist\CentralPDFScanner"
+if exist "dist\PDFScannerALAP" rmdir /s /q "dist\PDFScannerALAP"
 if exist "%APP_DIST%" rmdir /s /q "%APP_DIST%"
 
-"%APP_VENV%\Scripts\pyinstaller.exe" --noconfirm --clean --windowed --name CentralPDFScanner --icon "assets\pdf_scanner_feather.ico" --add-data "assets\logo_assembleia_legislativa_amapa.png;assets" --add-data "assets\pdf_scanner_feather.png;assets" --add-data "assets\pdf_scanner_feather.ico;assets" --collect-all fitz --collect-all pypdf --collect-all pdf2docx --hidden-import cv2 --hidden-import win32com.client app.py
+"%APP_VENV%\Scripts\pyinstaller.exe" --noconfirm --clean --windowed --name PDFScannerALAP --icon "assets\pdf_scanner_multifuncional_v282.ico" --add-data "assets\logo_assembleia_legislativa_amapa.png;assets" --add-data "assets\pdf_scanner_multifuncional_v282.png;assets" --add-data "assets\pdf_scanner_multifuncional_v282.ico;assets" --collect-all fitz --collect-all pypdf --collect-all pdf2docx --hidden-import cv2 --hidden-import win32com.client app.py
 if errorlevel 1 goto :error
 
-ren "dist\CentralPDFScanner" CentralPDFScanner_Portable
+ren "dist\PDFScannerALAP" CentralPDFScanner_Portable
 mkdir "%APP_DIST%\engines\tesseract" 2>nul
 
 if exist "C:\Program Files\Tesseract-OCR\tesseract.exe" (
@@ -39,14 +39,14 @@ if exist "C:\Program Files\Tesseract-OCR\tesseract.exe" (
 copy /Y "LEIA-ME.txt" "%APP_DIST%\LEIA-ME.txt" >nul
 copy /Y "LICENCA.txt" "%APP_DIST%\LICENCA.txt" >nul
 copy /Y "MANUAL_DO_USUARIO.pdf" "%APP_DIST%\MANUAL_DO_USUARIO.pdf" >nul
-copy /Y "assets\pdf_scanner_feather.ico" "%APP_DIST%\pdf_scanner_feather.ico" >nul
+copy /Y "assets\pdf_scanner_multifuncional_v282.ico" "%APP_DIST%\pdf_scanner_multifuncional_v282.ico" >nul
 if exist "dist\CentralPDFScanner_Portable.zip" del /q "dist\CentralPDFScanner_Portable.zip"
 "%APP_VENV%\Scripts\python.exe" -c "import shutil; shutil.make_archive(r'dist\CentralPDFScanner_Portable','zip',r'dist\CentralPDFScanner_Portable')"
 if errorlevel 1 goto :error
 
 echo.
 echo PRONTO: dist\CentralPDFScanner_Portable.zip
-echo Copie esse ZIP para qualquer computador Windows 10 ou 11, extraia e execute CentralPDFScanner.exe.
+echo Copie esse ZIP para qualquer computador Windows 10 ou 11, extraia e execute PDFScannerALAP.exe.
 pause
 exit /b 0
 

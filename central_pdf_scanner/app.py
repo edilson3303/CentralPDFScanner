@@ -297,8 +297,8 @@ class CentralApp(tk.Tk):
 
     def _configure_window_icon(self) -> None:
         """Usa o mesmo ícone na janela, nos diálogos e na barra de tarefas."""
-        png_icon = resource_path("assets/pdf_scanner_feather.png")
-        ico_icon = resource_path("assets/pdf_scanner_feather.ico")
+        png_icon = resource_path("assets/pdf_scanner_multifuncional_v282.png")
+        ico_icon = resource_path("assets/pdf_scanner_multifuncional_v282.ico")
         try:
             if png_icon.is_file():
                 self._window_icon = tk.PhotoImage(file=str(png_icon))
@@ -2143,8 +2143,8 @@ def _run_administrative_settings() -> None:
     root.withdraw()
     root.title(f"{APP_TITLE} - Configurações administrativas")
     try:
-        png_icon = resource_path("assets/pdf_scanner_feather.png")
-        ico_icon = resource_path("assets/pdf_scanner_feather.ico")
+        png_icon = resource_path("assets/pdf_scanner_multifuncional_v282.png")
+        ico_icon = resource_path("assets/pdf_scanner_multifuncional_v282.ico")
         if png_icon.is_file():
             root._window_icon = tk.PhotoImage(file=str(png_icon))  # type: ignore[attr-defined]
             root.iconphoto(True, root._window_icon)  # type: ignore[attr-defined]
@@ -2175,7 +2175,7 @@ def main() -> None:
         try:
             import ctypes
 
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ALAP.PDFScanner")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ALAP.PDFScanner.v282")
         except (AttributeError, OSError):
             pass
     if "--configuracoes" in sys.argv:

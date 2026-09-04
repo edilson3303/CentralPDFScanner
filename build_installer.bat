@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-if not exist "dist\CentralPDFScanner_Portable\CentralPDFScanner.exe" (
+if not exist "dist\CentralPDFScanner_Portable\PDFScannerALAP.exe" (
   echo ERRO: Execute primeiro build_portable.bat.
   pause
   exit /b 1
@@ -24,5 +24,5 @@ if errorlevel 1 (
 )
 
 echo.
-echo PRONTO: dist\installer\PDF_Scanner_ALAP_Setup_v2.8.1.exe
+echo PRONTO: dist\installer\PDF_Scanner_ALAP_Setup_v2.8.2.exe
 pause
