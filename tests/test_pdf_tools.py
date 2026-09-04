@@ -45,6 +45,9 @@ from central_pdf_scanner.word_tools import pdf_to_word
 from central_pdf_scanner.ocr import find_tesseract, images_to_searchable_pdf
 from central_pdf_scanner.scan_processing import is_blank_image, prepare_scanned_images
 from central_pdf_scanner.diagnostics import build_scanner_diagnostic
+from central_pdf_scanner.advanced_pdf import _find_libreoffice, compact_pdf, convert_pdf_to_pdfa, separate_pdf_batch
+from central_pdf_scanner.progress import OperationCancelled
+from central_pdf_scanner.app import default_scan_basename
 from central_pdf_scanner.word_tools import word_to_pdf
 from docx import Document
 
@@ -224,10 +227,63 @@ class PDFToolsTests(unittest.TestCase):
         self.assertEqual(prepare_scanned_images([blank, content], remove_blank_pages=True), [content])
 
     def test_scanner_diagnostic_does_not_require_a_scanner(self) -> None:
-        report = build_scanner_diagnostic("2.6.0", self.root)
-        self.assertIn("Versão do software: 2.6.0", report)
+        report = build_scanner_diagnostic("2.7.0", self.root)
+        self.assertIn("Versão do software: 2.7.0", report)
         self.assertIn("SCANNERS INSTALADOS NO WINDOWS", report)
         self.assertIn("não contém imagens nem conteúdo", report)
+
+    def test_compact_pdf_reports_before_and_after(self) -> None:
+        image_path = self.root / "grande.jpg"
+        image = Image.effect_noise((1400, 1800), 80).convert("RGB")
+        image.save(image_path, "JPEG", quality=98)
+        source = images_to_pdf([image_path], self.root / "grande.pdf")
+        output, before, after = compact_pdf(source, self.root / "compactado.pdf", "Tamanho reduzido")
+        self.assertTrue(output.is_file())
+        self.assertEqual(before, source.stat().st_size)
+        self.assertLessEqual(after, before)
+        self.assertEqual(len(PdfReader(str(output)).pages), 1)
+
+    def test_separate_batch_by_page_count(self) -> None:
+        source = make_pdf(self.root / "lote.pdf", 5)
+        outputs = separate_pdf_batch(source, self.root / "lotes", "Quantidade de páginas", 2)
+        self.assertEqual([len(PdfReader(str(path)).pages) for path in outputs], [2, 2, 1])
+
+    def test_separate_batch_by_blank_page(self) -> None:
+        document = fitz.open()
+        first = document.new_page()
+        first.insert_text((72, 72), "Processo um")
+        document.new_page()
+        third = document.new_page()
+        third.insert_text((72, 72), "Processo dois")
+        source = self.root / "separadores.pdf"
+        document.save(source)
+        document.close()
+        outputs = separate_pdf_batch(source, self.root / "separados", "Página em branco")
+        self.assertEqual(len(outputs), 2)
+        self.assertEqual([len(PdfReader(str(path)).pages) for path in outputs], [1, 1])
+
+    def test_cancellable_operation_stops_before_writing(self) -> None:
+        event = threading.Event()
+        event.set()
+        with self.assertRaises(OperationCancelled):
+            compact_pdf(self.source, self.root / "cancelado.pdf", "Equilibrado", cancel_event=event)
+
+    def test_configurable_scan_filename(self) -> None:
+        name = default_scan_basename(
+            "ABC 123", {"modelo_nome": "Scan_{serie}_{data}_{hora}_{setor}", "setor": "Protocolo"}
+        )
+        self.assertRegex(name, r"^Scan_ABC_123_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_Protocolo$")
+
+    @unittest.skipUnless(_find_libreoffice(), "LibreOffice não instalado")
+    def test_pdfa_conversion_identifies_pdfa_2b(self) -> None:
+        output = convert_pdf_to_pdfa(self.source, self.root / "arquivo.pdf")
+        document = fitz.open(output)
+        try:
+            metadata = document.get_xml_metadata()
+        finally:
+            document.close()
+        self.assertIn("<pdfaid:part>2</pdfaid:part>", metadata)
+        self.assertIn("<pdfaid:conformance>B</pdfaid:conformance>", metadata)
 
     def test_image_round_trip(self) -> None:
         image = self.root / "imagem.jpg"

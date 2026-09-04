@@ -1,8 +1,8 @@
 # PDF & Scanner
 
-Versão atual: 2.6.0
+Versão atual: 2.7.0
 
-Esta versão acrescenta diagnóstico integrado do scanner, perfis reutilizáveis, pré-visualização antes de salvar e correções automáticas de páginas digitalizadas.
+Esta versão acrescenta progresso detalhado com cancelamento, PDF/A-2b, compactação, separação automática de lotes e pasta/nomenclatura configuráveis.
 
 Também oferece Word editável compatível com LibreOffice, OCR executado silenciosamente em segundo plano e instalador para Windows.
 
@@ -25,6 +25,11 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 - Salvar e reutilizar perfis de digitalização com resolução, cor, origem, formato e OCR
 - Pré-visualizar a digitalização, reordenar, girar ou excluir páginas antes de salvar
 - Remover páginas em branco e corrigir inclinação e orientação automaticamente
+- Exibir etapas como aquecimento, página atual e OCR, com cancelamento seguro
+- Gerar PDF/A-2b para arquivamento institucional usando o LibreOffice instalado
+- Compactar PDFs em alta qualidade, modo equilibrado ou tamanho reduzido, comparando antes e depois
+- Separar lotes por página em branco, quantidade de páginas ou código de barras/QR Code
+- Configurar pasta padrão, salvamento automático, setor e modelo de nome com campos substituíveis
 - Trabalhar visualmente com miniaturas ao remover, juntar, dividir, girar ou cortar páginas
 - Cortar margens superior e inferior em centímetros
 - Converter PDF para Word editável de alta fidelidade, sem exigir o Microsoft Word
@@ -55,7 +60,7 @@ Depois de extraído, o pacote abre por `CentralPDFScanner.exe` sem instalar Pyth
 
 ## Gerar o instalador do Windows
 
-O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.6.0.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
+O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.7.0.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
 
 ## Digitalizar digitando o IP
 

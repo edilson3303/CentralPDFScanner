@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import threading
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,6 +10,7 @@ from typing import Callable
 from .ocr import images_to_searchable_pdf
 from .pdf_tools import images_to_pdf, save_images_as_jpg
 from .scan_processing import prepare_scanned_images
+from .progress import ProgressCallback, check_cancel, report
 
 
 class ScannerError(RuntimeError):
@@ -141,10 +143,14 @@ def scan_to_pdf(
     remove_blank_pages: bool = False,
     auto_deskew: bool = False,
     auto_orient: bool = False,
+    cancel_event: threading.Event | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> Path | list[Path]:
     if dpi not in (150, 200, 300, 400, 600):
         raise ScannerError("Resolução inválida.")
     client = _win32_client()
+    report(progress_callback, "Aquecendo e conectando ao scanner...")
+    check_cancel(cancel_event)
     manager = client.Dispatch("WIA.DeviceManager")
     selected = None
     for info in manager.DeviceInfos:
@@ -169,6 +175,8 @@ def scan_to_pdf(
         device = selected.Connect()
         _set_property(device, 3088, source_codes[input_source])
         while True:
+            check_cancel(cancel_event)
+            report(progress_callback, f"Digitalizando página {page_number}...")
             item = device.Items(1)
             _set_property(item, 6146, color_codes.get(color_mode, 1))
             _set_property(item, 6147, dpi)
@@ -185,6 +193,7 @@ def scan_to_pdf(
             path = Path(temp) / f"scan_{page_number:04d}.jpg"
             image.SaveFile(str(path))
             images.append(path)
+            check_cancel(cancel_event)
             if feeder:
                 page_number += 1
                 if page_number > 1000:
@@ -194,6 +203,8 @@ def scan_to_pdf(
                 break
             page_number += 1
 
+        check_cancel(cancel_event)
+        report(progress_callback, "Corrigindo e analisando as páginas...")
         images = prepare_scanned_images(
             images,
             remove_blank_pages=remove_blank_pages,
@@ -202,7 +213,13 @@ def scan_to_pdf(
             app_dir=app_dir,
         )
         if output_format.upper() == "JPG":
+            report(progress_callback, "Salvando arquivos JPG...")
             return save_images_as_jpg(images, output_pdf, filename_prefix)
         if use_ocr:
-            return images_to_searchable_pdf(images, output_pdf, language, app_dir)
+            report(progress_callback, "Aplicando OCR...")
+            return images_to_searchable_pdf(
+                images, output_pdf, language, app_dir,
+                cancel_event=cancel_event, progress_callback=progress_callback,
+            )
+        report(progress_callback, "Montando o PDF...")
         return images_to_pdf(images, output_pdf)

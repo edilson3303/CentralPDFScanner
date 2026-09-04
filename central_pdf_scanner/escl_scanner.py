@@ -3,6 +3,7 @@ from __future__ import annotations
 import ipaddress
 import tempfile
 import time
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -16,6 +17,7 @@ from PIL import Image
 from .ocr import images_to_searchable_pdf
 from .pdf_tools import images_to_pdf, save_images_as_jpg
 from .scan_processing import prepare_scanned_images
+from .progress import ProgressCallback, check_cancel, report
 
 
 class ESCLScannerError(RuntimeError):
@@ -340,8 +342,12 @@ def scan_escl_to_pdf(
     remove_blank_pages: bool = False,
     auto_deskew: bool = False,
     auto_orient: bool = False,
+    cancel_event: threading.Event | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> Path | list[Path]:
     base = _base_url(ip_address, port, protocol)
+    report(progress_callback, "Aquecendo e conectando ao scanner de rede...")
+    check_cancel(cancel_event)
     probe_escl_scanner(ip_address, port, protocol)
     with tempfile.TemporaryDirectory(prefix="pdf_scanner_ip_") as temp:
         directory = Path(temp)
@@ -351,6 +357,8 @@ def scan_escl_to_pdf(
             opener, job_url = _create_scan_job(base, protocol, dpi, color_mode, input_source, timeout=180)
             try:
                 while scanned_pages < MAX_SCAN_PAGES:
+                    check_cancel(cancel_event)
+                    report(progress_callback, f"Digitalizando página {scanned_pages + 1}...")
                     document = _next_document(opener, job_url, timeout=180, allow_end=True)
                     if document is None:
                         break
@@ -362,6 +370,8 @@ def scan_escl_to_pdf(
                 _release_scan_job(opener, job_url)
         else:
             while True:
+                check_cancel(cancel_event)
+                report(progress_callback, f"Digitalizando página {scanned_pages + 1}...")
                 opener, job_url = _create_scan_job(base, protocol, dpi, color_mode, input_source, timeout=180)
                 try:
                     document = _next_document(opener, job_url, timeout=180)
@@ -377,6 +387,8 @@ def scan_escl_to_pdf(
                     break
         if not images:
             raise ESCLScannerError("Nenhuma página foi recebida da multifuncional.")
+        check_cancel(cancel_event)
+        report(progress_callback, "Corrigindo e analisando as páginas...")
         images = prepare_scanned_images(
             images,
             remove_blank_pages=remove_blank_pages,
@@ -385,7 +397,13 @@ def scan_escl_to_pdf(
             app_dir=app_dir,
         )
         if output_format.upper() == "JPG":
+            report(progress_callback, "Salvando arquivos JPG...")
             return save_images_as_jpg(images, output_pdf, filename_prefix)
         if use_ocr:
-            return images_to_searchable_pdf(images, output_pdf, language, app_dir)
+            report(progress_callback, "Aplicando OCR...")
+            return images_to_searchable_pdf(
+                images, output_pdf, language, app_dir,
+                cancel_event=cancel_event, progress_callback=progress_callback,
+            )
+        report(progress_callback, "Montando o PDF...")
         return images_to_pdf(images, output_pdf)

@@ -19,6 +19,7 @@ from PIL import Image, ImageTk
 
 from . import __version__
 from .diagnostics import build_scanner_diagnostic
+from .advanced_pdf import compact_pdf, convert_pdf_to_pdfa, separate_pdf_batch
 from .escl_scanner import ESCLScannerError, detect_escl_details, scan_escl_to_pdf, validate_ip_settings
 from .ocr import find_tesseract, pdf_to_searchable_pdf
 from .pdf_tools import (
@@ -37,6 +38,7 @@ from .pdf_tools import (
     unprotect_pdf,
 )
 from .scanner import list_scanners, scan_to_pdf
+from .progress import OperationCancelled
 from .word_tools import pdf_to_word, word_to_pdf
 from .thumbnail_dialogs import MergePagesDialog, PageSelectionDialog, ScanPreviewDialog
 
@@ -72,12 +74,61 @@ DEFAULT_SCAN_PROFILES = {
         "auto_orient": True, "source": "",
     },
 }
+DEFAULT_OUTPUT_SETTINGS = {
+    "pasta_saida": "",
+    "modelo_nome": "Scan_{serie}_{data}_{hora}",
+    "setor": "",
+    "salvar_automaticamente": False,
+}
 
 
-def default_scan_basename(serial_number: str) -> str:
-    safe = re.sub(r'[<>:"/\\|?*]+', "_", serial_number).strip(" ._") or "SEM_NUMERO_DE_SERIE"
+def _safe_filename(value: str, fallback: str = "") -> str:
+    safe = re.sub(r'[<>:"/\\|?*]+', "_", value).strip(" ._")
     safe = re.sub(r"\s+", "_", safe)
-    return f"Scan_{safe}_{datetime.now():%Y-%m-%d_%H-%M-%S}"
+    return safe or fallback
+
+
+def _format_size(size: int) -> str:
+    value = float(size)
+    for unit in ("bytes", "KB", "MB", "GB"):
+        if value < 1024 or unit == "GB":
+            return f"{value:.0f} {unit}" if unit == "bytes" else f"{value:.2f} {unit}"
+        value /= 1024
+    return f"{value:.2f} GB"
+
+
+def _available_path(path: Path) -> Path:
+    if not path.exists():
+        return path
+    for number in range(2, 10000):
+        candidate = path.with_name(f"{path.stem}_{number}{path.suffix}")
+        if not candidate.exists():
+            return candidate
+    raise OSError("Não foi possível criar um nome de arquivo livre na pasta escolhida.")
+
+
+def _load_output_settings() -> dict:
+    result = dict(DEFAULT_OUTPUT_SETTINGS)
+    saved = _read_settings().get("saida_digitalizacao", {})
+    if isinstance(saved, dict):
+        result.update({key: saved[key] for key in result if key in saved})
+    return result
+
+
+def default_scan_basename(serial_number: str, settings: dict | None = None) -> str:
+    values = settings or _load_output_settings()
+    now = datetime.now()
+    fields = {
+        "serie": _safe_filename(serial_number, "SEM_NUMERO_DE_SERIE"),
+        "data": now.strftime("%Y-%m-%d"),
+        "hora": now.strftime("%H-%M-%S"),
+        "setor": _safe_filename(str(values.get("setor", "")), "SEM_SETOR"),
+    }
+    template = str(values.get("modelo_nome", DEFAULT_OUTPUT_SETTINGS["modelo_nome"]))
+    try:
+        return _safe_filename(template.format(**fields), f"Scan_{fields['serie']}_{fields['data']}_{fields['hora']}")
+    except (KeyError, ValueError):
+        return f"Scan_{fields['serie']}_{fields['data']}_{fields['hora']}"
 
 def app_directory() -> Path:
     if getattr(sys, "frozen", False):
@@ -179,6 +230,7 @@ class CentralApp(tk.Tk):
         self._busy = False
         self._success_callback = None
         self._error_callback = None
+        self._cancel_event: threading.Event | None = None
         self._configure_style()
         self._build_ui()
         self._center_main_window()
@@ -265,6 +317,8 @@ class CentralApp(tk.Tk):
                 ("Dividir PDF", self.divide),
                 ("Desproteger PDF", self.unprotect),
                 ("Cortar PDF", self.trim),
+                ("Compactar PDF", self.compress),
+                ("Separar lote", self.separate_batch),
             ],
             columns=3,
         ).pack(fill="x", pady=(0, 12))
@@ -277,6 +331,7 @@ class CentralApp(tk.Tk):
                 ("PDF para JPG", self.to_jpg),
                 ("JPG para PDF", self.from_images),
                 ("PDF Digitalizado para OCR", self.to_ocr),
+                ("PDF/A para arquivamento", self.to_pdfa),
             ],
             columns=4,
         ).pack(fill="x")
@@ -284,6 +339,9 @@ class CentralApp(tk.Tk):
         footer = ttk.Frame(self, padding=(20, 0, 20, 18))
         footer.pack(fill="x")
         ttk.Button(footer, text="Licença", command=self.show_license).pack(side="left", padx=(0, 8))
+        ttk.Button(footer, text="Configurações", command=self.output_settings).pack(side="left", padx=(0, 8))
+        self.cancel_button = ttk.Button(footer, text="Cancelar operação", command=self.cancel_operation, state="disabled")
+        self.cancel_button.pack(side="right", padx=(10, 0))
         self.progress = ttk.Progressbar(footer, mode="indeterminate", length=150)
         self.progress.pack(side="right", padx=(10, 0))
         self.status = ttk.Label(footer, text="Pronto.", style="Status.TLabel")
@@ -314,16 +372,32 @@ class CentralApp(tk.Tk):
     def _pick_pdf(self, title: str) -> str:
         return filedialog.askopenfilename(parent=self, title=title, filetypes=PDF_TYPES)
 
-    def _save_pdf(self, title: str, suggested: str) -> str:
-        return filedialog.asksaveasfilename(parent=self, title=title, defaultextension=".pdf", initialfile=suggested, filetypes=PDF_TYPES)
+    def _save_pdf(self, title: str, suggested: str, initialdir: str = "") -> str:
+        options = {
+            "parent": self, "title": title, "defaultextension": ".pdf",
+            "initialfile": suggested, "filetypes": PDF_TYPES,
+        }
+        if initialdir:
+            options["initialdir"] = initialdir
+        return filedialog.asksaveasfilename(**options)
 
-    def _run(self, label: str, function, *args, on_success=None, on_error=None, **kwargs) -> None:
+    def _run(
+        self, label: str, function, *args, on_success=None, on_error=None,
+        cancellable: bool = False, **kwargs,
+    ) -> None:
         if self._busy:
             messagebox.showinfo(APP_TITLE, "Aguarde a operação atual terminar.", parent=self)
             return
         self._busy = True
         self._success_callback = on_success
         self._error_callback = on_error
+        self._cancel_event = threading.Event() if cancellable else None
+        if cancellable:
+            kwargs["cancel_event"] = self._cancel_event
+            kwargs["progress_callback"] = lambda message: self._results.put(("progress", message))
+            self.cancel_button.configure(state="normal")
+        else:
+            self.cancel_button.configure(state="disabled")
         self.status.configure(text=label)
         self.progress.start(12)
 
@@ -332,6 +406,9 @@ class CentralApp(tk.Tk):
                 result = function(*args, **kwargs)
                 self._results.put(("ok", result))
             except Exception as exc:
+                if isinstance(exc, OperationCancelled):
+                    self._results.put(("cancelled", str(exc)))
+                    return
                 details = "".join(traceback.format_exception_only(type(exc), exc)).strip()
                 self._results.put(("error", details))
 
@@ -343,8 +420,14 @@ class CentralApp(tk.Tk):
         except queue.Empty:
             self.after(100, self._poll_results)
             return
+        if kind == "progress":
+            self.status.configure(text=str(payload))
+            self.after(100, self._poll_results)
+            return
         self._busy = False
         self.progress.stop()
+        self.cancel_button.configure(state="disabled")
+        self._cancel_event = None
         if kind == "ok":
             self.status.configure(text="Operação concluída com sucesso.")
             callback = self._success_callback
@@ -354,6 +437,14 @@ class CentralApp(tk.Tk):
                 callback(payload)
             else:
                 self._show_result(payload)
+        elif kind == "cancelled":
+            self._success_callback = None
+            callback = self._error_callback
+            self._error_callback = None
+            if callback is not None:
+                callback(payload)
+            self.status.configure(text="Operação cancelada.")
+            messagebox.showinfo(APP_TITLE, "Operação cancelada com segurança.", parent=self)
         else:
             self._success_callback = None
             callback = self._error_callback
@@ -363,6 +454,12 @@ class CentralApp(tk.Tk):
                 callback(payload)
             messagebox.showerror(APP_TITLE, str(payload), parent=self)
         self.after(100, self._poll_results)
+
+    def cancel_operation(self) -> None:
+        if self._busy and self._cancel_event is not None:
+            self._cancel_event.set()
+            self.cancel_button.configure(state="disabled")
+            self.status.configure(text="Cancelando com segurança...")
 
     def _show_result(self, payload: object) -> None:
         display = payload
@@ -487,7 +584,68 @@ class CentralApp(tk.Tk):
             return
         output = self._save_pdf("Salvar PDF com OCR", f"{Path(source).stem}_OCR.pdf")
         if output:
-            self._run("Aplicando OCR ao PDF...", pdf_to_searchable_pdf, source, output, dialog.result, app_directory())
+            self._run(
+                "Aplicando OCR ao PDF...", pdf_to_searchable_pdf,
+                source, output, dialog.result, app_directory(), cancellable=True,
+            )
+
+    def to_pdfa(self) -> None:
+        source = self._pick_pdf("Escolha o PDF para arquivamento")
+        if not source:
+            return
+        output = self._save_pdf("Salvar PDF/A-2b", f"{Path(source).stem}_PDFA.pdf")
+        if output:
+            self._run(
+                "Preparando PDF/A-2b...", convert_pdf_to_pdfa,
+                source, output, cancellable=True,
+            )
+
+    def compress(self) -> None:
+        source = self._pick_pdf("Escolha o PDF para compactar")
+        if not source:
+            return
+        dialog = CompressionDialog(self, Path(source).stat().st_size)
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
+        output = self._save_pdf("Salvar PDF compactado", f"{Path(source).stem}_compactado.pdf")
+        if output:
+            self._run(
+                "Compactando PDF...", compact_pdf, source, output, dialog.result,
+                cancellable=True, on_success=self._show_compression_result,
+            )
+
+    def _show_compression_result(self, result: object) -> None:
+        path, before, after = result
+        reduction = 0 if not before else max(0, (before - after) * 100 / before)
+        messagebox.showinfo(
+            APP_TITLE,
+            f"Compactação concluída.\n\nAntes: {_format_size(before)}\n"
+            f"Depois: {_format_size(after)}\nRedução: {reduction:.1f}%",
+            parent=self,
+        )
+        self._show_result(path)
+
+    def separate_batch(self) -> None:
+        source = self._pick_pdf("Escolha o lote em PDF")
+        if not source:
+            return
+        dialog = BatchSeparationDialog(self)
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
+        folder = filedialog.askdirectory(parent=self, title="Escolha a pasta para os lotes separados")
+        if not folder:
+            return
+        mode, pages_per_file, remove_separator = dialog.result
+        self._run(
+            "Separando lote...", separate_pdf_batch, source, folder, mode,
+            pages_per_file, remove_separator, cancellable=True,
+        )
+
+    def output_settings(self) -> None:
+        dialog = OutputSettingsDialog(self, _load_output_settings())
+        self.wait_window(dialog)
 
     def show_license(self) -> None:
         LicenseDialog(self)
@@ -568,7 +726,8 @@ class CentralApp(tk.Tk):
             device_id, device_name, serial_number, dpi, color, input_source, output_format,
             use_ocr, language, remove_blank, auto_deskew, auto_orient,
         ) = dialog.result
-        basename = default_scan_basename(serial_number)
+        output_settings = _load_output_settings()
+        basename = default_scan_basename(serial_number, output_settings)
         staging = Path(tempfile.mkdtemp(prefix="pdf_scanner_preview_"))
         output = staging / "digitalizacao.pdf" if output_format == "PDF" else staging
         self._run(
@@ -588,8 +747,11 @@ class CentralApp(tk.Tk):
             remove_blank_pages=remove_blank,
             auto_deskew=auto_deskew,
             auto_orient=auto_orient,
-            on_success=lambda result: self._preview_scan_result(result, output_format, basename, staging),
+            on_success=lambda result: self._preview_scan_result(
+                result, output_format, basename, staging, output_settings
+            ),
             on_error=lambda _error: shutil.rmtree(staging, ignore_errors=True),
+            cancellable=True,
         )
 
     def _ask_next_page(self, page: int) -> bool:
@@ -618,7 +780,8 @@ class CentralApp(tk.Tk):
             output_format, use_ocr, language, remove_blank, auto_deskew, auto_orient,
         ) = dialog.result
         _save_last_scanner_ip(ip_address)
-        basename = default_scan_basename(serial_number)
+        output_settings = _load_output_settings()
+        basename = default_scan_basename(serial_number, output_settings)
         staging = Path(tempfile.mkdtemp(prefix="pdf_scanner_preview_"))
         output = staging / "digitalizacao.pdf" if output_format == "PDF" else staging
         self._run(
@@ -640,11 +803,17 @@ class CentralApp(tk.Tk):
             remove_blank_pages=remove_blank,
             auto_deskew=auto_deskew,
             auto_orient=auto_orient,
-            on_success=lambda result: self._preview_scan_result(result, output_format, basename, staging),
+            on_success=lambda result: self._preview_scan_result(
+                result, output_format, basename, staging, output_settings
+            ),
             on_error=lambda _error: shutil.rmtree(staging, ignore_errors=True),
+            cancellable=True,
         )
 
-    def _preview_scan_result(self, result: object, output_format: str, basename: str, staging: Path) -> None:
+    def _preview_scan_result(
+        self, result: object, output_format: str, basename: str, staging: Path,
+        output_settings: dict,
+    ) -> None:
         try:
             if output_format == "PDF":
                 dialog = ScanPreviewDialog(self, pdf_path=Path(str(result)))
@@ -655,13 +824,34 @@ class CentralApp(tk.Tk):
                 shutil.rmtree(staging, ignore_errors=True)
                 self.status.configure(text="Pronto.")
                 return
+            configured_folder = str(output_settings.get("pasta_saida", ""))
+            automatic = bool(output_settings.get("salvar_automaticamente")) and bool(configured_folder)
+            if automatic:
+                Path(configured_folder).mkdir(parents=True, exist_ok=True)
             if output_format == "PDF":
-                output = self._save_pdf("Salvar digitalização", f"{basename}.pdf")
+                output = (
+                    str(_available_path(Path(configured_folder) / f"{basename}.pdf"))
+                    if automatic else
+                    self._save_pdf("Salvar digitalização", f"{basename}.pdf", configured_folder)
+                )
                 function = compose_scanned_pdf
                 args = (dialog.result, output)
                 label = "Salvando PDF revisado..."
             else:
-                output = filedialog.askdirectory(parent=self, title="Escolha a pasta para os arquivos JPG")
+                if automatic:
+                    output = configured_folder
+                    original_basename = basename
+                    number = 2
+                    while any(Path(configured_folder).glob(f"{basename}_pagina_*.jpg")):
+                        basename = f"{original_basename}_{number}"
+                        number += 1
+                else:
+                    directory_options = {
+                        "parent": self, "title": "Escolha a pasta para os arquivos JPG",
+                    }
+                    if configured_folder:
+                        directory_options["initialdir"] = configured_folder
+                    output = filedialog.askdirectory(**directory_options)
                 function = save_preview_images_as_jpg
                 args = (dialog.result, output, basename)
                 label = "Salvando imagens revisadas..."
@@ -761,6 +951,158 @@ class IntegerInputDialog(BaseDialog):
             )
             return
         self.result = value
+        self.destroy()
+
+
+class CompressionDialog(BaseDialog):
+    def __init__(self, parent: tk.Misc, original_size: int) -> None:
+        super().__init__(parent, "Compactar PDF")
+        ttk.Label(self.body, text=f"Tamanho atual: {_format_size(original_size)}").grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 10)
+        )
+        ttk.Label(self.body, text="Qualidade").grid(row=1, column=0, sticky="w", padx=(0, 12))
+        self.quality = ttk.Combobox(
+            self.body, state="readonly",
+            values=("Alta qualidade", "Equilibrado", "Tamanho reduzido"), width=28,
+        )
+        self.quality.set("Equilibrado")
+        self.quality.grid(row=1, column=1)
+        ttk.Label(
+            self.body,
+            text="O texto e a camada OCR são preservados. Imagens são reduzidas conforme a opção.",
+            wraplength=470,
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        self.buttons(self.accept)
+
+    def accept(self) -> None:
+        self.result = self.quality.get()
+        self.destroy()
+
+
+class BatchSeparationDialog(BaseDialog):
+    def __init__(self, parent: tk.Misc) -> None:
+        super().__init__(parent, "Separação automática de lote")
+        ttk.Label(self.body, text="Separar por").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.mode = ttk.Combobox(
+            self.body, state="readonly",
+            values=("Página em branco", "Quantidade de páginas", "Código de barras"), width=30,
+        )
+        self.mode.set("Página em branco")
+        self.mode.grid(row=0, column=1, pady=5)
+        self.mode.bind("<<ComboboxSelected>>", self._update_fields)
+        ttk.Label(self.body, text="Páginas por arquivo").grid(row=1, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.quantity = ttk.Entry(self.body, width=10)
+        self.quantity.insert(0, "10")
+        self.quantity.grid(row=1, column=1, sticky="w", pady=5)
+        self.remove_separator = tk.BooleanVar(value=True)
+        self.separator_check = ttk.Checkbutton(
+            self.body, text="Remover a página separadora do resultado",
+            variable=self.remove_separator,
+        )
+        self.separator_check.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Label(
+            self.body,
+            text="No modo código de barras, a página que contém o código inicia um novo lote.",
+            wraplength=480,
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        self._update_fields()
+        self.buttons(self.accept)
+
+    def _update_fields(self, _event=None) -> None:
+        quantity_mode = self.mode.get() == "Quantidade de páginas"
+        self.quantity.configure(state="normal" if quantity_mode else "disabled")
+        self.separator_check.configure(state="disabled" if quantity_mode else "normal")
+
+    def accept(self) -> None:
+        try:
+            pages = int(self.quantity.get()) if self.mode.get() == "Quantidade de páginas" else 1
+            if pages < 1 or pages > 10000:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror(APP_TITLE, "Informe uma quantidade válida de páginas.", parent=self)
+            return
+        self.result = (self.mode.get(), pages, bool(self.remove_separator.get()))
+        self.destroy()
+
+
+class OutputSettingsDialog(BaseDialog):
+    ALLOWED_FIELDS = {"serie", "data", "hora", "setor"}
+
+    def __init__(self, parent: tk.Misc, settings: dict) -> None:
+        super().__init__(parent, "Pasta e nomenclatura")
+        ttk.Label(self.body, text="Pasta padrão").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=5)
+        folder_row = ttk.Frame(self.body)
+        folder_row.grid(row=0, column=1, sticky="ew", pady=5)
+        self.folder = ttk.Entry(folder_row, width=42)
+        self.folder.insert(0, str(settings.get("pasta_saida", "")))
+        self.folder.pack(side="left", fill="x", expand=True)
+        ttk.Button(folder_row, text="Escolher...", command=self._choose_folder).pack(side="left", padx=(6, 0))
+        ttk.Label(self.body, text="Modelo do nome").grid(row=1, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.template = ttk.Entry(self.body, width=53)
+        self.template.insert(0, str(settings.get("modelo_nome", DEFAULT_OUTPUT_SETTINGS["modelo_nome"])))
+        self.template.grid(row=1, column=1, sticky="ew", pady=5)
+        ttk.Label(self.body, text="Setor").grid(row=2, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.sector = ttk.Entry(self.body, width=35)
+        self.sector.insert(0, str(settings.get("setor", "")))
+        self.sector.grid(row=2, column=1, sticky="w", pady=5)
+        self.automatic = tk.BooleanVar(value=bool(settings.get("salvar_automaticamente", False)))
+        ttk.Checkbutton(
+            self.body, text="Salvar automaticamente na pasta padrão após a pré-visualização",
+            variable=self.automatic,
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        ttk.Label(
+            self.body,
+            text="Campos disponíveis: {serie}, {data}, {hora} e {setor}.\n"
+                 "Exemplo: Scan_{serie}_{data}_{hora}_{setor}",
+            foreground="#476582",
+        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        self.body.columnconfigure(1, weight=1)
+        self.buttons(self.accept)
+
+    def _choose_folder(self) -> None:
+        selected = filedialog.askdirectory(parent=self, title="Escolha a pasta padrão")
+        if selected:
+            self.folder.delete(0, "end")
+            self.folder.insert(0, selected)
+
+    def accept(self) -> None:
+        template = self.template.get().strip()
+        fields = set(re.findall(r"\{([^{}]+)\}", template))
+        if not template or fields.difference(self.ALLOWED_FIELDS):
+            messagebox.showerror(
+                APP_TITLE, "O modelo contém um campo inválido. Use somente {serie}, {data}, {hora} e {setor}.",
+                parent=self,
+            )
+            return
+        try:
+            template.format(serie="SERIE", data="2026-09-04", hora="12-30-00", setor="SETOR")
+        except (KeyError, ValueError):
+            messagebox.showerror(APP_TITLE, "O modelo de nome está incompleto ou inválido.", parent=self)
+            return
+        folder = self.folder.get().strip()
+        if self.automatic.get() and not folder:
+            messagebox.showerror(APP_TITLE, "Escolha uma pasta para o salvamento automático.", parent=self)
+            return
+        if folder:
+            try:
+                Path(folder).mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                messagebox.showerror(APP_TITLE, f"Não foi possível acessar a pasta: {exc}", parent=self)
+                return
+        values = {
+            "pasta_saida": folder,
+            "modelo_nome": template,
+            "setor": self.sector.get().strip(),
+            "salvar_automaticamente": bool(self.automatic.get()),
+        }
+        try:
+            data = _read_settings()
+            data["saida_digitalizacao"] = values
+            _write_settings(data)
+        except OSError as exc:
+            messagebox.showerror(APP_TITLE, f"Não foi possível salvar as configurações: {exc}", parent=self)
+            return
+        self.result = values
         self.destroy()
 
 

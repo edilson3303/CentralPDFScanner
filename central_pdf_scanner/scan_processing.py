@@ -24,7 +24,9 @@ def is_blank_image(image: Image.Image) -> bool:
     total = max(1, sample.width * sample.height)
     ink_ratio = sum(histogram[:245]) / total
     deviation = ImageStat.Stat(sample).stddev[0]
-    return ink_ratio < 0.0015 and deviation < 8.0
+    # O limite é conservador para não apagar páginas com pouco texto, como
+    # recibos, capas ou folhas contendo apenas um número de processo.
+    return ink_ratio < 0.0004 and deviation < 4.0
 
 
 def _deskew(image: Image.Image) -> Image.Image:

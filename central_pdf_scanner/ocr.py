@@ -4,11 +4,14 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 from typing import Sequence
 
 from pypdf import PdfReader, PdfWriter
 import fitz
+
+from .progress import ProgressCallback, check_cancel, report
 
 
 class OCRError(RuntimeError):
@@ -54,6 +57,9 @@ def images_to_searchable_pdf(
     output_pdf: str | Path,
     language: str = "por+eng",
     app_dir: str | Path | None = None,
+    *,
+    cancel_event: threading.Event | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> Path:
     executable = find_tesseract(app_dir)
     if not executable:
@@ -69,19 +75,34 @@ def images_to_searchable_pdf(
         temp_dir = Path(temp)
         partials: list[Path] = []
         for index, image in enumerate(images):
+            check_cancel(cancel_event)
+            report(progress_callback, f"Aplicando OCR — página {index + 1} de {len(images)}...")
             base = temp_dir / f"pagina_{index + 1:04d}"
             command = [str(executable), str(image), str(base), "-l", language, "pdf"]
-            result = subprocess.run(
+            process = subprocess.Popen(
                 command,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
                 **_hidden_process_options(),
             )
+            while True:
+                try:
+                    stdout, stderr = process.communicate(timeout=0.25)
+                    break
+                except subprocess.TimeoutExpired:
+                    if cancel_event is not None and cancel_event.is_set():
+                        process.terminate()
+                        try:
+                            process.wait(timeout=3)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                        check_cancel(cancel_event)
             generated = base.with_suffix(".pdf")
-            if result.returncode != 0 or not generated.is_file():
-                detail = result.stderr.strip() or "falha não especificada"
+            if process.returncode != 0 or not generated.is_file():
+                detail = stderr.strip() or stdout.strip() or "falha não especificada"
                 raise OCRError(f"Falha no OCR da página {index + 1}: {detail}")
             partials.append(generated)
         writer = PdfWriter()
@@ -99,6 +120,9 @@ def pdf_to_searchable_pdf(
     language: str = "por+eng",
     app_dir: str | Path | None = None,
     dpi: int = 300,
+    *,
+    cancel_event: threading.Event | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> Path:
     """Renderiza um PDF digitalizado e cria uma camada de texto OCR."""
     source = Path(input_pdf)
@@ -111,9 +135,14 @@ def pdf_to_searchable_pdf(
         try:
             matrix = fitz.Matrix(dpi / 72.0, dpi / 72.0)
             for index, page in enumerate(document):
+                check_cancel(cancel_event)
+                report(progress_callback, f"Preparando página {index + 1} de {len(document)} para OCR...")
                 image = directory / f"pagina_{index + 1:04d}.png"
                 page.get_pixmap(matrix=matrix, alpha=False).save(str(image))
                 images.append(image)
         finally:
             document.close()
-        return images_to_searchable_pdf(images, output_pdf, language, app_dir)
+        return images_to_searchable_pdf(
+            images, output_pdf, language, app_dir,
+            cancel_event=cancel_event, progress_callback=progress_callback,
+        )

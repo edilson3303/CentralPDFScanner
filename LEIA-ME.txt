@@ -1,4 +1,4 @@
-PDF & SCANNER 2.6.0
+PDF & SCANNER 2.7.0
 =================
 
 COMO ABRIR A VERSAO PORTATIL
@@ -87,3 +87,21 @@ PRIVACIDADE
 JANELAS
 - As janelas internas abertas pelos botoes aparecem centralizadas na tela.
 - A janela Scanner de rede se reajusta apos a deteccao, sem cortar a mensagem nem os botoes.
+
+PROGRESSO E CANCELAMENTO
+- Durante a digitalizacao, o programa informa aquecimento, pagina atual, correcoes e OCR.
+- O botao "Cancelar operacao" interrompe com seguranca assim que a etapa atual permitir.
+
+PDF/A E COMPACTACAO
+- "PDF/A para arquivamento" gera PDF/A-2b usando o LibreOffice instalado no computador.
+- "Compactar PDF" oferece alta qualidade, equilibrado e tamanho reduzido.
+- Ao terminar a compactacao, o programa mostra o tamanho antes, depois e a reducao obtida.
+
+SEPARACAO AUTOMATICA
+- "Separar lote" divide um PDF por pagina em branco, quantidade fixa ou codigo de barras/QR Code.
+- A pagina separadora pode ser removida dos arquivos finais.
+
+PASTA E NOMENCLATURA
+- O botao "Configuracoes" permite escolher pasta padrao e salvamento automatico.
+- O modelo aceita {serie}, {data}, {hora} e {setor}.
+- Exemplo: Scan_{serie}_{data}_{hora}_{setor}.
