@@ -33,6 +33,7 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 - Executar o OCR sem abrir janelas de comando durante o processamento
 - Instalar no Windows por um assistente ou usar diretamente a versão portátil
 - Abrir as janelas internas centralizadas na tela
+- Reajustar automaticamente a janela Scanner de rede após detectar o equipamento
 - Consultar no aplicativo a licença institucional da ALAP
 
 ## Usar pelo código-fonte
