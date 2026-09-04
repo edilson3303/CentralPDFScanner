@@ -1026,6 +1026,8 @@ class IPScanDialog(BaseDialog):
             self.body,
             text="Digite o IP para detectar vidro e alimentador.",
             foreground="#476582",
+            wraplength=560,
+            justify="left",
         )
         self.detection_status.grid(row=7, column=0, columnspan=2, sticky="w", pady=(9, 0))
         self.ip_address.bind("<KeyRelease>", self._schedule_detection)
@@ -1085,6 +1087,9 @@ class IPScanDialog(BaseDialog):
                 )
             else:
                 self.detection_status.configure(text=str(payload))
+            # A resposta pode ser maior que o texto inicial. Recalcula o tamanho
+            # para evitar conteúdo e botões cortados e mantém a janela centralizada.
+            self.after_idle(self._show_centered)
         self.after(100, self._poll_source_results)
 
     def accept(self) -> None:
