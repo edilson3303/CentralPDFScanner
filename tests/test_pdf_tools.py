@@ -288,6 +288,10 @@ class PDFToolsTests(unittest.TestCase):
             _job_url(base, "http://lexmark.local/ESCL/SCANJOBS/123/"),
             base + "/ESCL/SCANJOBS/123",
         )
+        self.assertEqual(
+            _job_url(base, "http://lexmark.local/eSCL/ScanJob/173f53b8-3f7c-4fc6-9405-e95c04d359cd"),
+            base + "/eSCL/ScanJob/173f53b8-3f7c-4fc6-9405-e95c04d359cd",
+        )
 
     def test_escl_probe_and_scan_to_pdf(self) -> None:
         server = ThreadingHTTPServer(("127.0.0.1", 0), FakeESCLHandler)

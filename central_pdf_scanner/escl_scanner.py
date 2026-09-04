@@ -189,9 +189,13 @@ def _job_url(base: str, location: str) -> str:
     path = parsed.path.rstrip("/")
     normalized_path = path.casefold()
     normalized_root = SCAN_JOBS_PATH.casefold()
+    lexmark_root = "/eSCL/ScanJob".casefold()
     # Alguns modelos Lexmark devolvem o próprio /eSCL/ScanJobs, sem um
-    # identificador adicional, ou alteram a capitalização do caminho.
-    if normalized_path != normalized_root and not normalized_path.startswith(normalized_root + "/"):
+    # identificador adicional, alteram a capitalização ou usam ScanJob
+    # no singular no cabeçalho Location.
+    valid_standard = normalized_path == normalized_root or normalized_path.startswith(normalized_root + "/")
+    valid_lexmark = normalized_path.startswith(lexmark_root + "/")
+    if not (valid_standard or valid_lexmark):
         raise ESCLScannerError("A multifuncional devolveu um endereço de trabalho inválido.")
     # Alguns equipamentos devolvem seu nome DNS no Location. Mantemos o caminho,
     # mas usamos o IP informado para evitar falha de resolução desse nome local.
