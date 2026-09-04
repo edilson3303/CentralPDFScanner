@@ -1,4 +1,4 @@
-PDF & SCANNER 2.7.0
+PDF & SCANNER 2.7.1
 =================
 
 COMO ABRIR A VERSAO PORTATIL
@@ -47,6 +47,8 @@ REVISAO E CORRECAO DA DIGITALIZACAO
 - Antes de salvar, a digitalizacao mostra miniaturas de todas as paginas.
 - Na pre-visualizacao, voce pode reordenar, girar e excluir paginas.
 - As opcoes automaticas podem remover paginas em branco, corrigir inclinacao e orientacao.
+- Para maior velocidade, essas correcoes ficam desmarcadas no perfil Documento padrao.
+- A deteccao de orientacao executa uma analise adicional e deve ser marcada somente quando necessaria.
 - Confira sempre a pre-visualizacao antes de salvar, especialmente apos usar correcoes automaticas.
 
 PERFIS DE DIGITALIZACAO

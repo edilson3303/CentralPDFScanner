@@ -226,9 +226,16 @@ class PDFToolsTests(unittest.TestCase):
             self.assertFalse(is_blank_image(opened))
         self.assertEqual(prepare_scanned_images([blank, content], remove_blank_pages=True), [content])
 
+    def test_scan_processing_fast_path_preserves_jpeg_bytes(self) -> None:
+        image = self.root / "pagina.jpg"
+        Image.new("RGB", (1200, 1600), "white").save(image, "JPEG", quality=91)
+        original = image.read_bytes()
+        self.assertEqual(prepare_scanned_images([image]), [image])
+        self.assertEqual(image.read_bytes(), original)
+
     def test_scanner_diagnostic_does_not_require_a_scanner(self) -> None:
-        report = build_scanner_diagnostic("2.7.0", self.root)
-        self.assertIn("Versão do software: 2.7.0", report)
+        report = build_scanner_diagnostic("2.7.1", self.root)
+        self.assertIn("Versão do software: 2.7.1", report)
         self.assertIn("SCANNERS INSTALADOS NO WINDOWS", report)
         self.assertIn("não contém imagens nem conteúdo", report)
 

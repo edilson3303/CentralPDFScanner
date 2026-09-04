@@ -55,23 +55,23 @@ OCR_LANGUAGES = {
 DEFAULT_SCAN_PROFILES = {
     "Documento padrão": {
         "dpi": "300", "color": "Cinza", "output_format": "PDF", "use_ocr": False,
-        "language": "Português + Inglês", "remove_blank": True, "auto_deskew": True,
-        "auto_orient": True, "source": "",
+        "language": "Português + Inglês", "remove_blank": False, "auto_deskew": False,
+        "auto_orient": False, "source": "",
     },
     "Documento colorido": {
         "dpi": "300", "color": "Cor", "output_format": "PDF", "use_ocr": False,
-        "language": "Português + Inglês", "remove_blank": True, "auto_deskew": True,
-        "auto_orient": True, "source": "",
+        "language": "Português + Inglês", "remove_blank": False, "auto_deskew": False,
+        "auto_orient": False, "source": "",
     },
     "Frente e verso": {
         "dpi": "300", "color": "Cinza", "output_format": "PDF", "use_ocr": False,
-        "language": "Português + Inglês", "remove_blank": True, "auto_deskew": True,
-        "auto_orient": True, "source": "Alimentador superior - frente e verso",
+        "language": "Português + Inglês", "remove_blank": False, "auto_deskew": False,
+        "auto_orient": False, "source": "Alimentador superior - frente e verso",
     },
     "OCR pesquisável": {
         "dpi": "300", "color": "Cinza", "output_format": "PDF", "use_ocr": True,
-        "language": "Português + Inglês", "remove_blank": True, "auto_deskew": True,
-        "auto_orient": True, "source": "",
+        "language": "Português + Inglês", "remove_blank": False, "auto_deskew": False,
+        "auto_orient": False, "source": "",
     },
 }
 DEFAULT_OUTPUT_SETTINGS = {
@@ -1523,8 +1523,13 @@ class ScanDialog(BaseDialog):
         ttk.Checkbutton(self.body, text="Remover páginas em branco automaticamente", variable=self.remove_blank).grid(row=8, column=0, columnspan=2, sticky="w", pady=(10, 2))
         ttk.Checkbutton(self.body, text="Corrigir inclinação automaticamente", variable=self.auto_deskew).grid(row=9, column=0, columnspan=2, sticky="w", pady=2)
         ttk.Checkbutton(self.body, text="Detectar e corrigir orientação", variable=self.auto_orient).grid(row=10, column=0, columnspan=2, sticky="w", pady=2)
+        ttk.Label(
+            self.body,
+            text="As correções automáticas aumentam o tempo de processamento.",
+            foreground="#6b7280",
+        ).grid(row=11, column=0, columnspan=2, sticky="w", pady=(3, 0))
         profile_row = ttk.LabelFrame(self.body, text="Perfil de digitalização", padding=8)
-        profile_row.grid(row=11, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        profile_row.grid(row=12, column=0, columnspan=2, sticky="ew", pady=(10, 0))
         self.profile = ttk.Combobox(profile_row, state="readonly", values=tuple(self.profiles), width=24)
         self.profile.set("Documento padrão")
         self.profile.pack(side="left")
@@ -1679,8 +1684,13 @@ class IPScanDialog(BaseDialog):
         ttk.Checkbutton(self.body, text="Remover páginas em branco automaticamente", variable=self.remove_blank).grid(row=8, column=0, columnspan=2, sticky="w", pady=(10, 2))
         ttk.Checkbutton(self.body, text="Corrigir inclinação automaticamente", variable=self.auto_deskew).grid(row=9, column=0, columnspan=2, sticky="w", pady=2)
         ttk.Checkbutton(self.body, text="Detectar e corrigir orientação", variable=self.auto_orient).grid(row=10, column=0, columnspan=2, sticky="w", pady=2)
+        ttk.Label(
+            self.body,
+            text="As correções automáticas aumentam o tempo de processamento.",
+            foreground="#6b7280",
+        ).grid(row=11, column=0, columnspan=2, sticky="w", pady=(3, 0))
         profile_row = ttk.LabelFrame(self.body, text="Perfil de digitalização", padding=8)
-        profile_row.grid(row=11, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        profile_row.grid(row=12, column=0, columnspan=2, sticky="ew", pady=(10, 0))
         self.profile = ttk.Combobox(profile_row, state="readonly", values=tuple(self.profiles), width=24)
         self.profile.set("Documento padrão")
         self.profile.pack(side="left")

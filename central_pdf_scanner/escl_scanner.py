@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
+import io
 import tempfile
 import time
 import threading
@@ -253,7 +254,7 @@ def _next_document(
     )
     # O vidro pode levar vários segundos para aquecer e preparar a primeira
     # página. Nesse período, Lexmark e outros fabricantes respondem 409/503.
-    for attempt in range(45):
+    for attempt in range(90):
         try:
             with opener.open(request, timeout=timeout) as response:
                 data = response.read(MAX_DOCUMENT_BYTES + 1)
@@ -264,8 +265,8 @@ def _next_document(
             if allow_end and exc.code in (404, 410):
                 return None
             if exc.code in (409, 503):
-                if attempt < 44:
-                    time.sleep(1.0)
+                if attempt < 89:
+                    time.sleep(0.5)
                     continue
                 if allow_end:
                     return None
@@ -306,6 +307,19 @@ def _document_to_images(data: bytes, content_type: str, destination: Path, page_
         finally:
             document.close()
         return outputs
+
+    # A maioria dos scanners eSCL já entrega JPEG. Valida e preserva esses
+    # bytes, evitando gravar e recodificar a mesma página duas vezes.
+    if content_type == "image/jpeg" or data.startswith(b"\xff\xd8\xff"):
+        try:
+            with Image.open(io.BytesIO(data)) as image:
+                if getattr(image, "n_frames", 1) == 1:
+                    image.verify()
+                    target = destination / f"ip_scan_{page_start:04d}.jpg"
+                    target.write_bytes(data)
+                    return [target]
+        except (OSError, SyntaxError):
+            pass
 
     source = destination / f"received_{page_start:04d}.img"
     source.write_bytes(data)
@@ -348,7 +362,8 @@ def scan_escl_to_pdf(
     base = _base_url(ip_address, port, protocol)
     report(progress_callback, "Aquecendo e conectando ao scanner de rede...")
     check_cancel(cancel_event)
-    probe_escl_scanner(ip_address, port, protocol)
+    # O diálogo já consultou as capacidades e validou o equipamento. Criar o
+    # trabalho abaixo confirma novamente a conexão sem repetir essa consulta.
     with tempfile.TemporaryDirectory(prefix="pdf_scanner_ip_") as temp:
         directory = Path(temp)
         images: list[Path] = []

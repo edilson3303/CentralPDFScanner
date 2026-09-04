@@ -36,10 +36,14 @@ def _deskew(image: Image.Image) -> Image.Image:
     except ImportError:
         return image
     rgb = image.convert("RGB")
-    data = np.asarray(rgb)
+    # Detecta a inclinação em uma cópia reduzida. A rotação final continua
+    # sendo aplicada à imagem original, preservando sua resolução.
+    analysis = rgb.copy()
+    analysis.thumbnail((1400, 1400), Image.Resampling.LANCZOS)
+    data = np.asarray(analysis)
     gray = cv2.cvtColor(data, cv2.COLOR_RGB2GRAY)
     edges = cv2.Canny(gray, 60, 180)
-    minimum = max(80, image.width // 5)
+    minimum = max(80, analysis.width // 5)
     lines = cv2.HoughLinesP(
         edges, 1, math.pi / 180, threshold=80,
         minLineLength=minimum, maxLineGap=20,
@@ -90,9 +94,14 @@ def prepare_scanned_images(
     app_dir: str | Path | None = None,
 ) -> list[Path]:
     """Aplica correções opcionais e devolve as páginas mantidas."""
+    paths = [Path(value) for value in images]
+    # O caminho comum não deve abrir e recodificar páginas JPEG grandes.
+    if not (remove_blank_pages or auto_deskew or auto_orient):
+        if not paths:
+            raise ScanProcessingError("Nenhuma página foi recebida.")
+        return paths
     kept: list[Path] = []
-    for page_number, value in enumerate(images, 1):
-        path = Path(value)
+    for page_number, path in enumerate(paths, 1):
         try:
             with Image.open(path) as opened:
                 image = ImageOps.exif_transpose(opened).convert("RGB")
@@ -102,14 +111,18 @@ def prepare_scanned_images(
                     image = _deskew(image)
                 if auto_orient:
                     temporary = path.with_name(path.stem + "_orientacao.jpg")
-                    image.save(temporary, "JPEG", quality=94)
+                    orientation_sample = image.copy()
+                    orientation_sample.thumbnail((1600, 1600), Image.Resampling.LANCZOS)
+                    orientation_sample.save(temporary, "JPEG", quality=85)
                     try:
                         rotation = _orientation_rotation(temporary, app_dir)
                     finally:
                         temporary.unlink(missing_ok=True)
                     if rotation:
                         image = image.rotate(-rotation, expand=True, fillcolor="white")
-                image.save(path, "JPEG", quality=94)
+                # Somente recodifica quando uma correção visual foi solicitada.
+                if auto_deskew or auto_orient:
+                    image.save(path, "JPEG", quality=94)
                 kept.append(path)
         except (OSError, subprocess.SubprocessError) as exc:
             raise ScanProcessingError(f"Não foi possível corrigir a página {page_number}.") from exc

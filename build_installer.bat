@@ -24,5 +24,5 @@ if errorlevel 1 (
 )
 
 echo.
-echo PRONTO: dist\installer\PDF_Scanner_ALAP_Setup_v2.7.0.exe
+echo PRONTO: dist\installer\PDF_Scanner_ALAP_Setup_v2.7.1.exe
 pause
