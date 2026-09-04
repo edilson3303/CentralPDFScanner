@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import threading
 import unittest
@@ -47,8 +48,10 @@ from central_pdf_scanner.scan_processing import is_blank_image, prepare_scanned_
 from central_pdf_scanner.diagnostics import build_scanner_diagnostic
 from central_pdf_scanner.advanced_pdf import _find_libreoffice, compact_pdf, convert_pdf_to_pdfa, separate_pdf_batch
 from central_pdf_scanner.progress import OperationCancelled
-from central_pdf_scanner.app import default_scan_basename
-from central_pdf_scanner.thumbnail_dialogs import selection_after_click
+from central_pdf_scanner import app as application
+from central_pdf_scanner.app import DEFAULT_SCAN_PROFILES, default_scan_basename
+from central_pdf_scanner.security import is_administrative_sid
+from central_pdf_scanner.thumbnail_dialogs import merge_window_size, selection_after_click
 from central_pdf_scanner.word_tools import word_to_pdf
 from docx import Document
 
@@ -155,6 +158,11 @@ class PDFToolsTests(unittest.TestCase):
         selected, anchor = selection_after_click(selected, 7, anchor, ctrl=False, shift=True)
         self.assertEqual(selected, {4, 5, 6, 7})
 
+    def test_merge_window_is_sized_for_pages_and_screen(self) -> None:
+        self.assertEqual(merge_window_size(1, 1920, 1080), (900, 520))
+        self.assertEqual(merge_window_size(20, 1920, 1080), (955, 850))
+        self.assertEqual(merge_window_size(20, 800, 600), (750, 530))
+
     def test_parse_split_intervals(self) -> None:
         self.assertEqual(parse_split_intervals("1-2,3,4-5", 5), [[0, 1], [2], [3, 4]])
         with self.assertRaises(PDFToolError):
@@ -243,8 +251,8 @@ class PDFToolsTests(unittest.TestCase):
         self.assertEqual(image.read_bytes(), original)
 
     def test_scanner_diagnostic_does_not_require_a_scanner(self) -> None:
-        report = build_scanner_diagnostic("2.7.4", self.root)
-        self.assertIn("Versão do software: 2.7.4", report)
+        report = build_scanner_diagnostic("2.8.0", self.root)
+        self.assertIn("Versão do software: 2.8.0", report)
         self.assertIn("SCANNERS INSTALADOS NO WINDOWS", report)
         self.assertIn("não contém imagens nem conteúdo", report)
 
@@ -345,8 +353,26 @@ class PDFToolsTests(unittest.TestCase):
 
     def test_unprotect_rejects_wrong_password(self) -> None:
         protected = protect_pdf(self.source, self.root / "protegido.pdf", "Senha123")
-        with self.assertRaisesRegex(PDFToolError, "Senha incorreta"):
+        with self.assertRaisesRegex(PDFToolError, "incorretas"):
             unprotect_pdf(protected, self.root / "falha.pdf", "errada")
+
+    def test_unprotect_accepts_separate_opening_and_owner_passwords(self) -> None:
+        protected = protect_pdf(
+            self.source, self.root / "duas_senhas.pdf", "Abrir123", "Editar456", True
+        )
+        output = unprotect_pdf(
+            protected, self.root / "desprotegido.pdf", "Abrir123", "Editar456"
+        )
+        self.assertFalse(PdfReader(str(output)).is_encrypted)
+
+    def test_administrative_group_sids(self) -> None:
+        self.assertTrue(is_administrative_sid("S-1-5-32-544"))
+        self.assertTrue(is_administrative_sid("S-1-5-21-100-200-300-512"))
+        self.assertTrue(is_administrative_sid("S-1-5-21-100-200-300-519"))
+        self.assertFalse(is_administrative_sid("S-1-5-21-100-200-300-513"))
+
+    def test_default_scan_mode_is_color(self) -> None:
+        self.assertEqual(DEFAULT_SCAN_PROFILES["Documento padrão"]["color"], "Cor")
 
     def test_opening_and_editing_protections_are_independent(self) -> None:
         opening_only = protect_pdf(self.source, self.root / "abertura.pdf", "Abrir123")
@@ -393,6 +419,40 @@ class PDFToolsTests(unittest.TestCase):
             validate_ip_settings("192.168.1.50", 70000, "http")
         with self.assertRaisesRegex(ESCLScannerError, "rede local"):
             validate_ip_settings("8.8.8.8", 80, "http")
+
+    def test_network_scanners_come_only_from_administrative_settings(self) -> None:
+        machine = self.root / "maquina"
+        user = self.root / "usuario"
+        machine.mkdir()
+        user.mkdir()
+        (user / "configuracao.json").write_text(
+            json.dumps({"ultimo_ip_scanner": "192.168.1.99"}), encoding="utf-8"
+        )
+        original_machine = application.machine_settings_directory
+        original_user = application.settings_directory
+        try:
+            application.machine_settings_directory = lambda: machine
+            application.settings_directory = lambda: user
+            self.assertEqual(application._load_network_scanners(), [])
+            (machine / "configuracao.json").write_text(
+                json.dumps({
+                    "scanners_rede": [
+                        {"nome": "Protocolo", "ip": "192.168.1.20"},
+                        {"nome": "Recursos Humanos", "ip": "192.168.1.21"},
+                    ]
+                }),
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                application._load_network_scanners(),
+                [
+                    {"nome": "Protocolo", "ip": "192.168.1.20"},
+                    {"nome": "Recursos Humanos", "ip": "192.168.1.21"},
+                ],
+            )
+        finally:
+            application.machine_settings_directory = original_machine
+            application.settings_directory = original_user
 
     def test_escl_rejects_invalid_job_location(self) -> None:
         from central_pdf_scanner.escl_scanner import _job_url

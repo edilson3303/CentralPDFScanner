@@ -1,8 +1,8 @@
 # PDF & Scanner
 
-Versão atual: 2.7.4
+Versão atual: 2.8.0
 
-Esta versão organiza a pré-visualização de Juntar PDFs no mesmo padrão das demais ferramentas: cabeçalho, contador, comandos, cinco miniaturas por linha, rolagem vertical e rodapé. Também permite selecionar várias páginas com Ctrl e Shift.
+Esta versão redimensiona automaticamente a pré-visualização de Juntar PDFs, permite selecionar várias páginas com Ctrl e Shift, cadastra vários scanners de rede e restringe as configurações a credenciais administrativas do computador ou do Active Directory.
 
 Também oferece progresso detalhado com cancelamento, PDF/A-2b, compactação, separação automática de lotes e pasta/nomenclatura configuráveis.
 
@@ -15,11 +15,12 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 ## Funções
 
 - Digitalizar usando scanners instalados no Windows, inclusive multifuncionais de rede
-- Digitar o IP de uma multifuncional compatível com eSCL/AirScan e digitalizar diretamente
+- Cadastrar vários scanners por nome e IP em uma configuração protegida pelo UAC do Windows
+- Escolher um scanner de rede cadastrado e digitalizar diretamente por eSCL/AirScan
 - Detectar automaticamente e escolher entre o vidro e o alimentador superior, quando disponíveis
 - Digitalizar automaticamente todas as folhas do alimentador em um único PDF
 - Digitalizar frente e verso quando o alimentador da multifuncional oferecer duplex
-- Memorizar o último IP de multifuncional utilizado
+- Memorizar o último scanner de rede utilizado
 - Escolher na lista scanners de rede, USB ou outros scanners instalados no Windows
 - Salvar a digitalização em PDF ou JPG, com nome automático contendo número de série, data e hora
 - Escolher digitalização normal ou PDF pesquisável com OCR; idiomas aparecem por nome completo
@@ -31,7 +32,7 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 - Gerar PDF/A-2b para arquivamento institucional usando o LibreOffice instalado
 - Compactar PDFs em alta qualidade, modo equilibrado ou tamanho reduzido, comparando antes e depois
 - Separar lotes por página em branco, quantidade de páginas ou código de barras/QR Code
-- Configurar pasta padrão, salvamento automático, setor e modelo de nome com campos substituíveis
+- Configurar, com credenciais administrativas, scanners de rede, pasta padrão, salvamento automático, setor e modelo de nome
 - Trabalhar visualmente com miniaturas ao remover, juntar, dividir, girar ou cortar páginas
 - Cortar margens superior e inferior em centímetros
 - Converter PDF para Word editável de alta fidelidade, sem exigir o Microsoft Word
@@ -46,6 +47,8 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 - Abrir as janelas internas centralizadas na tela
 - Reajustar automaticamente a janela Scanner de rede após detectar o equipamento
 - Consultar no aplicativo a licença institucional da ALAP
+- Abrir no aplicativo o Manual do Usuário ilustrado
+- Criar atalhos no Menu Iniciar comum e, opcionalmente, na Área de Trabalho pública
 
 ## Usar pelo código-fonte
 
@@ -62,18 +65,19 @@ Depois de extraído, o pacote abre por `CentralPDFScanner.exe` sem instalar Pyth
 
 ## Gerar o instalador do Windows
 
-O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.7.4.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
+O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.8.0.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
 
-## Digitalizar digitando o IP
+## Cadastrar e usar scanners de rede
 
-1. Clique em **Scanner de rede**.
-2. Digite o IP exibido no painel ou na configuração de rede da multifuncional.
-3. Aguarde a detecção automática e escolha **Vidro**, **Alimentador - somente frente** ou **Alimentador - frente e verso**.
-4. Escolha resolução, cor e OCR e clique em **Continuar**.
+1. Clique em **Configurações** e autorize o UAC com uma conta de administrador local ou do Active Directory.
+2. Cadastre o nome e o IP de cada multifuncional e salve.
+3. Na janela principal, clique em **Scanner de rede** e escolha o equipamento cadastrado.
+4. Aguarde a detecção automática e escolha **Vidro**, **Alimentador superior - somente frente** ou **Alimentador superior - frente e verso**.
+5. Escolha resolução, modo, formato e OCR e clique em **Continuar**.
 
 Ao escolher o alimentador, coloque todas as folhas na bandeja. O programa digitaliza o lote automaticamente, sem perguntar página por página, e reúne todas as páginas em um único PDF. A opção frente e verso só aparece quando o equipamento informa que possui duplex.
 
-O último IP e os perfis personalizados ficam salvos nas configurações do usuário do Windows e serão recuperados automaticamente na próxima abertura.
+Os IPs ficam em uma configuração comum do computador, gravável somente pelo processo administrativo. O último scanner escolhido e os perfis personalizados ficam nas preferências do usuário.
 
 Esse modo usa automaticamente HTTP e porta 80 e requer que a multifuncional ofereça eSCL/AirScan (também usado por aparelhos compatíveis com Mopria). Se o modelo não oferecer o protocolo, instale o driver WIA do fabricante e use **Scanner USB**.
 
@@ -86,6 +90,10 @@ No modo WIA, o scanner precisa ter o driver instalado e estar cadastrado em **Co
 ## Licença
 
 O software é de titularidade da Assembleia Legislativa do Estado do Amapá. Os termos institucionais estão em `LICENCA.txt` e também no botão **Licença** do aplicativo. Componentes de terceiros mantêm suas próprias licenças.
+
+## Manual
+
+O arquivo ilustrado `MANUAL_DO_USUARIO.pdf` acompanha as versões portátil e instalável e pode ser aberto pelo botão **Manual**.
 
 ## Testes
 

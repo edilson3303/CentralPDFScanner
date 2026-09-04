@@ -1,110 +1,94 @@
-PDF & SCANNER 2.7.4
+PDF & SCANNER 2.8.0
 =================
 
-COMO ABRIR A VERSAO PORTATIL
+COMO ABRIR A VERSÃO PORTÁTIL
 1. Extraia todo o arquivo CentralPDFScanner_Portable.zip.
-2. Abra a pasta extraida.
+2. Abra a pasta extraída.
 3. Execute CentralPDFScanner.exe.
-4. Nao mova apenas o EXE: mantenha toda a pasta junta.
+4. Não mova apenas o EXE: mantenha toda a pasta junta.
 
-SCANNER DE REDE
-- Para digitar o IP, clique em "Scanner de rede".
-- Informe o IP mostrado no painel da multifuncional. O programa usa HTTP e porta 80 automaticamente.
-- O programa detecta e permite escolher Vidro ou Alimentador superior, conforme as
-  opcoes oferecidas pela multifuncional.
-- No alimentador, todas as folhas sao digitalizadas automaticamente no mesmo PDF.
-- Se o equipamento oferecer duplex, aparece a opcao Alimentador superior - frente e verso.
-- O ultimo IP utilizado fica gravado nas configuracoes do usuario do Windows.
-- A digitalizacao direta por IP requer que o aparelho ofereca eSCL/AirScan (Mopria).
-- Se o aparelho nao for compativel, use a opcao "Scanner USB"
-  depois de instalar o driver WIA do fabricante.
-- O scanner deve aparecer em Configuracoes do Windows > Bluetooth e dispositivos
+MANUAL
+- O arquivo MANUAL_DO_USUARIO.pdf acompanha o programa.
+- O botão "Manual" abre o guia ilustrado com o passo a passo de cada função.
+
+CONFIGURAÇÕES ADMINISTRATIVAS
+- O botão "Configurações" solicita autorização do UAC do Windows.
+- Se o usuário atual não estiver elevado, informe o usuário e a senha de um
+  administrador local ou do Active Directory.
+- Somente nesse painel é possível cadastrar, editar ou remover IPs de scanners.
+- A pasta padrão, o salvamento automático, o setor e o modelo do nome também
+  ficam na configuração administrativa comum do computador.
+
+SCANNERS DE REDE
+- Um administrador pode cadastrar vários equipamentos, cada um com nome e IP.
+- Ao clicar em "Scanner de rede", o usuário escolhe um equipamento cadastrado.
+- O programa usa HTTP e porta 80 automaticamente e detecta Vidro, Alimentador
+  superior - somente frente e Alimentador superior - frente e verso.
+- No alimentador, todas as folhas são digitalizadas automaticamente no mesmo PDF.
+- A digitalização direta exige eSCL/AirScan (Mopria). Se o equipamento não for
+  compatível, instale o driver WIA completo do fabricante e use "Scanner USB".
+- O último scanner escolhido fica gravado nas preferências do usuário.
+
+SCANNER USB
+- O scanner deve aparecer em Configurações do Windows > Bluetooth e dispositivos
   > Impressoras e scanners.
-- Instale o driver completo/WIA do fabricante da multifuncional.
-- Estar visivel apenas como impressora nao basta: o componente de scanner tambem
-  precisa estar instalado.
-- O programa usa WIA, padrao do Windows. Alguns aparelhos antigos oferecem apenas
-  TWAIN; nesses casos, instale o driver WIA mais recente do fabricante.
-- Na janela de digitalizacao, cada equipamento aparece identificado como Rede,
-  USB/conectado ou Instalado no Windows. Voce pode escolher o scanner desejado.
+- Estar visível apenas como impressora não basta: o componente WIA do scanner
+  também precisa estar instalado.
+- Alguns aparelhos antigos oferecem apenas TWAIN; procure o driver WIA mais
+  recente do fabricante.
 
 PROTEGER E DESPROTEGER PDF
-- Proteger PDF permite exigir senha para abrir e/ou impedir edicao, selecao e copia.
-- As duas protecoes sao independentes e podem ser marcadas ao mesmo tempo.
-- Ao usar as duas, a senha de abertura e a senha de proprietario devem ser diferentes.
-- Desproteger PDF aceita uma senha valida e remove todas as protecoes.
-- Guarde a senha em local seguro: o programa nao possui mecanismo para recupera-la.
+- As caixas de proteção começam desmarcadas.
+- É possível exigir senha para abrir e/ou impedir edição, seleção e cópia.
+- A senha de abertura e a senha de proprietário podem ser diferentes.
+- Em "Desproteger PDF", há campos próprios para informar cada senha.
+- Guarde as senhas em local seguro: o programa não possui mecanismo de recuperação.
 
 OCR
-- O OCR cria PDF pesquisavel, mantendo a imagem digitalizada.
-- O mecanismo Tesseract pode ser incluido automaticamente pelo build_portable.bat
-  quando estiver instalado em C:\Program Files\Tesseract-OCR.
-- O idioma e escolhido pelo nome completo, sem digitacao livre.
-- A conversao "PDF Digitalizado para OCR" torna PDFs pesquisaveis.
-- O OCR funciona em segundo plano, sem abrir janelas do CMD a cada pagina.
+- O OCR cria PDF pesquisável, mantendo a imagem digitalizada.
+- O idioma é escolhido pelo nome completo, sem digitação livre.
+- A conversão "PDF Digitalizado para OCR" torna PDFs pesquisáveis.
+- O OCR funciona em segundo plano, sem abrir janelas do CMD a cada página.
 
-REVISAO E CORRECAO DA DIGITALIZACAO
-- Antes de salvar, a digitalizacao mostra miniaturas de todas as paginas.
-- Na pre-visualizacao, voce pode reordenar, girar e excluir paginas.
-- As opcoes automaticas podem remover paginas em branco, corrigir inclinacao e orientacao.
-- Para maior velocidade, essas correcoes ficam desmarcadas no perfil Documento padrao.
-- A deteccao de orientacao executa uma analise adicional e deve ser marcada somente quando necessaria.
-- Confira sempre a pre-visualizacao antes de salvar, especialmente apos usar correcoes automaticas.
+REVISÃO DA DIGITALIZAÇÃO
+- Antes de salvar, o programa mostra miniaturas de todas as páginas.
+- É possível reordenar, girar e excluir páginas.
+- As opções automáticas podem remover páginas em branco e corrigir inclinação e
+  orientação. Elas ficam desmarcadas por padrão para acelerar a digitalização.
+- O modo padrão é Cor.
 
-PERFIS DE DIGITALIZACAO
-- Use os perfis padrao ou salve um perfil personalizado com suas configuracoes frequentes.
-- O perfil guarda resolucao, cor, origem, formato, OCR e correcoes automaticas.
+EDIÇÃO VISUAL
+- Remover páginas, Juntar PDFs, Dividir PDF, Girar páginas e Cortar PDF exibem
+  miniaturas.
+- A janela de Juntar PDFs é redimensionada automaticamente, usa cinco colunas e
+  possui rolagem vertical.
+- Use Ctrl+clique para páginas separadas e Shift+clique para um intervalo.
+- Em Dividir PDF, informe grupos como 1-3,4-6,7-10.
+- O corte das margens superior e inferior é informado em centímetros.
 
-DIAGNOSTICO
-- Clique em "Testar scanner" para verificar WIA, o ultimo scanner de rede e o Tesseract OCR.
-- O relatorio pode ser copiado ou salvo e nao inclui imagens nem conteudo dos documentos.
-
-CONVERSOES WORD
-- Word para PDF usa primeiro o Microsoft Word instalado. Se ele nao estiver
-  disponivel, tenta o LibreOffice.
-- PDF para Word gera um DOCX editavel de alta fidelidade sem exigir Microsoft Word.
-- Sem o Word, o conversor portatil reconstrói paragrafos, tabelas e imagens,
-  mantendo o texto editavel e a formatacao compativel com o LibreOffice.
-- Diagramas e infograficos que ja sao imagens permanecem como imagens.
-- Para PDF somente digitalizado, use primeiro PDF Digitalizado para OCR.
-
-EDICAO VISUAL
-- Remover, juntar, dividir, girar e cortar margens exibem miniaturas das paginas.
-- Em Dividir PDF, informe grupos como 1-3,4-6,7-10; cada intervalo gera um arquivo.
-- Em Juntar PDFs, as paginas aparecem em cinco colunas, com rolagem vertical e comandos no topo.
-- Use Ctrl+clique para escolher paginas separadas e Shift+clique para selecionar um intervalo.
-- O corte superior/inferior e informado em centimetros.
-
-NOME E FORMATO DA DIGITALIZACAO
-- O nome sugerido segue Scan_NumeroDeSerie_AAAA-MM-DD_HH-MM-SS.pdf.
-- Se o driver ou a multifuncional nao informar a serie, sera usado SEM_NUMERO_DE_SERIE.
-- A digitalizacao pode ser salva em PDF ou em arquivos JPG por pagina.
-
-LICENCA
-- Use o botao pequeno "Licenca" para ler os termos institucionais da ALAP.
-- Uma copia dos termos acompanha o pacote em LICENCA.txt.
-
-PRIVACIDADE
-- Todas as operacoes sao locais. Nenhum documento e enviado para a internet.
-
-JANELAS
-- As janelas internas abertas pelos botoes aparecem centralizadas na tela.
-- A janela Scanner de rede se reajusta apos a deteccao, sem cortar a mensagem nem os botoes.
-
-PROGRESSO E CANCELAMENTO
-- Durante a digitalizacao, o programa informa aquecimento, pagina atual, correcoes e OCR.
-- O botao "Cancelar operacao" interrompe com seguranca assim que a etapa atual permitir.
-
-PDF/A E COMPACTACAO
-- "PDF/A para arquivamento" gera PDF/A-2b usando o LibreOffice instalado no computador.
+PDF/A, COMPACTAÇÃO E LOTES
+- "PDF/A (arquivamento)" gera PDF/A-2b usando o LibreOffice instalado.
 - "Compactar PDF" oferece alta qualidade, equilibrado e tamanho reduzido.
-- Ao terminar a compactacao, o programa mostra o tamanho antes, depois e a reducao obtida.
+- "Separar em lotes" divide por página em branco, quantidade fixa ou código de
+  barras/QR Code.
 
-SEPARACAO AUTOMATICA
-- "Separar lote" divide um PDF por pagina em branco, quantidade fixa ou codigo de barras/QR Code.
-- A pagina separadora pode ser removida dos arquivos finais.
+CONVERSÕES WORD
+- Word para PDF usa Microsoft Word ou LibreOffice instalado.
+- PDF para Word gera um DOCX editável sem exigir Microsoft Word.
+- A fidelidade pode variar em documentos com diagramação complexa, fontes não
+  instaladas, diagramas e infográficos.
 
-PASTA E NOMENCLATURA
-- O botao "Configuracoes" permite escolher pasta padrao e salvamento automatico.
-- O modelo aceita {serie}, {data}, {hora} e {setor}.
-- Exemplo: Scan_{serie}_{data}_{hora}_{setor}.
+NOME E FORMATO DA DIGITALIZAÇÃO
+- O nome sugerido segue Scan_NumeroDeSerie_AAAA-MM-DD_HH-MM-SS.pdf.
+- Se a série não for informada, será usado SEM_NUMERO_DE_SERIE.
+- A digitalização pode ser salva em PDF ou em arquivos JPG por página.
+
+DIAGNÓSTICO, PRIVACIDADE E LICENÇA
+- "Testar scanner" verifica WIA, scanner de rede e Tesseract OCR e permite salvar
+  um relatório sem imagens nem conteúdo dos documentos.
+- Todas as operações são locais. Nenhum documento é enviado para a internet.
+- O botão "Licença" mostra os termos institucionais da ALAP.
+
+ATALHOS DO INSTALADOR
+- O atalho do Menu Iniciar é criado para todos os usuários do computador.
+- Se a opção for marcada, o atalho da Área de Trabalho também será público.

@@ -39,6 +39,7 @@ from .pdf_tools import (
 )
 from .scanner import list_scanners, scan_to_pdf
 from .progress import OperationCancelled
+from .security import is_process_elevated, launch_elevated_settings
 from .word_tools import pdf_to_word, word_to_pdf
 from .thumbnail_dialogs import MergePagesDialog, PageSelectionDialog, ScanPreviewDialog
 
@@ -54,7 +55,7 @@ OCR_LANGUAGES = {
 }
 DEFAULT_SCAN_PROFILES = {
     "Documento padrão": {
-        "dpi": "300", "color": "Cinza", "output_format": "PDF", "use_ocr": False,
+        "dpi": "300", "color": "Cor", "output_format": "PDF", "use_ocr": False,
         "language": "Português + Inglês", "remove_blank": False, "auto_deskew": False,
         "auto_orient": False, "source": "",
     },
@@ -64,12 +65,12 @@ DEFAULT_SCAN_PROFILES = {
         "auto_orient": False, "source": "",
     },
     "Frente e verso": {
-        "dpi": "300", "color": "Cinza", "output_format": "PDF", "use_ocr": False,
+        "dpi": "300", "color": "Cor", "output_format": "PDF", "use_ocr": False,
         "language": "Português + Inglês", "remove_blank": False, "auto_deskew": False,
         "auto_orient": False, "source": "Alimentador superior - frente e verso",
     },
     "OCR pesquisável": {
-        "dpi": "300", "color": "Cinza", "output_format": "PDF", "use_ocr": True,
+        "dpi": "300", "color": "Cor", "output_format": "PDF", "use_ocr": True,
         "language": "Português + Inglês", "remove_blank": False, "auto_deskew": False,
         "auto_orient": False, "source": "",
     },
@@ -109,7 +110,11 @@ def _available_path(path: Path) -> Path:
 
 def _load_output_settings() -> dict:
     result = dict(DEFAULT_OUTPUT_SETTINGS)
-    saved = _read_settings().get("saida_digitalizacao", {})
+    saved = _read_machine_settings().get("saida_digitalizacao", {})
+    if not isinstance(saved, dict) or not saved:
+        # Migra, na primeira configuração administrativa, os valores das
+        # versões que armazenavam essas opções por usuário.
+        saved = _read_settings().get("saida_digitalizacao", {})
     if isinstance(saved, dict):
         result.update({key: saved[key] for key in result if key in saved})
     return result
@@ -145,6 +150,14 @@ def settings_directory() -> Path:
     return app_directory()
 
 
+def machine_settings_directory() -> Path:
+    """Pasta comum, gravável por administradores e legível pelos usuários."""
+    if sys.platform == "win32":
+        program_data = os.environ.get("PROGRAMDATA", r"C:\ProgramData")
+        return Path(program_data) / "ALAP" / "PDFScanner"
+    return app_directory() / "configuracao_sistema"
+
+
 def resource_path(relative: str) -> Path:
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         return Path(sys._MEIPASS) / relative  # type: ignore[attr-defined]
@@ -168,19 +181,53 @@ def _write_settings(data: dict) -> None:
     temporary.replace(target)
 
 
-def _load_last_scanner_ip() -> str:
+def _read_machine_settings() -> dict:
     try:
-        data = _read_settings()
-        address, _, _ = validate_ip_settings(str(data.get("ultimo_ip_scanner", "")), 80, "http")
-        return address
-    except (OSError, ValueError, TypeError, json.JSONDecodeError, ESCLScannerError):
+        value = json.loads((machine_settings_directory() / "configuracao.json").read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return {}
+
+
+def _write_machine_settings(data: dict) -> None:
+    directory = machine_settings_directory()
+    target = directory / "configuracao.json"
+    temporary = target.with_suffix(".tmp")
+    directory.mkdir(parents=True, exist_ok=True)
+    temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(target)
+
+
+def _load_network_scanners() -> list[dict[str, str]]:
+    scanners: list[dict[str, str]] = []
+    raw = _read_machine_settings().get("scanners_rede", [])
+    if isinstance(raw, list):
+        for index, item in enumerate(raw, 1):
+            if not isinstance(item, dict):
+                continue
+            try:
+                address, _, _ = validate_ip_settings(str(item.get("ip", "")), 80, "http")
+            except ESCLScannerError:
+                continue
+            name = str(item.get("nome", "")).strip() or f"Scanner de rede {index}"
+            scanners.append({"nome": name, "ip": address})
+    return scanners
+
+
+def _load_last_scanner_ip() -> str:
+    scanners = _load_network_scanners()
+    if not scanners:
         return ""
+    preferred = str(_read_settings().get("ultimo_scanner_rede", ""))
+    return preferred if any(item["ip"] == preferred for item in scanners) else scanners[0]["ip"]
 
 
 def _save_last_scanner_ip(ip_address: str) -> None:
     try:
+        if not any(item["ip"] == ip_address for item in _load_network_scanners()):
+            return
         data = _read_settings()
-        data["ultimo_ip_scanner"] = ip_address
+        data["ultimo_scanner_rede"] = ip_address
         _write_settings(data)
     except OSError:
         pass
@@ -249,7 +296,7 @@ class CentralApp(tk.Tk):
         self.geometry(f"{width}x{height}+{x}+{y}")
 
     def _configure_window_icon(self) -> None:
-        """Usa a mesma pena na janela, nos dialogos e na barra de tarefas."""
+        """Usa o mesmo ícone na janela, nos diálogos e na barra de tarefas."""
         png_icon = resource_path("assets/pdf_scanner_feather.png")
         ico_icon = resource_path("assets/pdf_scanner_feather.ico")
         try:
@@ -310,17 +357,17 @@ class CentralApp(tk.Tk):
             content,
             "Edição de PDF",
             [
-                ("Remover páginas", self.remove),
                 ("Juntar PDFs", self.merge),
-                ("Proteger PDF", self.protect),
-                ("Girar páginas", self.rotate),
                 ("Dividir PDF", self.divide),
+                ("Proteger PDF", self.protect),
                 ("Desproteger PDF", self.unprotect),
+                ("Remover páginas", self.remove),
+                ("Girar páginas", self.rotate),
                 ("Cortar PDF", self.trim),
                 ("Compactar PDF", self.compress),
-                ("Separar lote", self.separate_batch),
+                ("Separar em lotes", self.separate_batch),
             ],
-            columns=3,
+            columns=4,
         ).pack(fill="x", pady=(0, 12))
         self._build_section(
             content,
@@ -331,7 +378,7 @@ class CentralApp(tk.Tk):
                 ("PDF para JPG", self.to_jpg),
                 ("JPG para PDF", self.from_images),
                 ("PDF Digitalizado para OCR", self.to_ocr),
-                ("PDF/A para arquivamento", self.to_pdfa),
+                ("PDF/A (arquivamento)", self.to_pdfa),
             ],
             columns=4,
         ).pack(fill="x")
@@ -339,6 +386,7 @@ class CentralApp(tk.Tk):
         footer = ttk.Frame(self, padding=(20, 0, 20, 18))
         footer.pack(fill="x")
         ttk.Button(footer, text="Licença", command=self.show_license).pack(side="left", padx=(0, 8))
+        ttk.Button(footer, text="Manual", command=self.show_manual).pack(side="left", padx=(0, 8))
         ttk.Button(footer, text="Configurações", command=self.output_settings).pack(side="left", padx=(0, 8))
         self.cancel_button = ttk.Button(footer, text="Cancelar operação", command=self.cancel_operation, state="disabled")
         self.cancel_button.pack(side="right", padx=(10, 0))
@@ -520,7 +568,7 @@ class CentralApp(tk.Tk):
         self.wait_window(dialog)
         if dialog.result is None:
             return
-        folder = filedialog.askdirectory(parent=self, title="Escolha a pasta para as paginas divididas")
+        folder = filedialog.askdirectory(parent=self, title="Escolha a pasta para as páginas divididas")
         if folder:
             self._run("Dividindo PDF...", split_pdf, source, folder, dialog.result)
 
@@ -639,16 +687,47 @@ class CentralApp(tk.Tk):
             return
         mode, pages_per_file, remove_separator = dialog.result
         self._run(
-            "Separando lote...", separate_pdf_batch, source, folder, mode,
+            "Separando em lotes...", separate_pdf_batch, source, folder, mode,
             pages_per_file, remove_separator, cancellable=True,
         )
 
     def output_settings(self) -> None:
-        dialog = OutputSettingsDialog(self, _load_output_settings())
+        if sys.platform == "win32" and not is_process_elevated():
+            if not launch_elevated_settings():
+                messagebox.showerror(
+                    APP_TITLE,
+                    "As configurações exigem as credenciais de um administrador local ou do Active Directory.",
+                    parent=self,
+                )
+            return
+        dialog = OutputSettingsDialog(self, _load_output_settings(), _load_network_scanners())
         self.wait_window(dialog)
 
     def show_license(self) -> None:
         LicenseDialog(self)
+
+    def show_manual(self) -> None:
+        manual = app_directory() / "MANUAL_DO_USUARIO.pdf"
+        if not manual.is_file():
+            messagebox.showerror(
+                APP_TITLE,
+                "O Manual do Usuário não foi encontrado nesta instalação.",
+                parent=self,
+            )
+            return
+        try:
+            if sys.platform == "win32":
+                os.startfile(str(manual))  # type: ignore[attr-defined]
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(manual)])
+            else:
+                subprocess.Popen(["xdg-open", str(manual)])
+        except Exception as exc:
+            messagebox.showerror(
+                APP_TITLE,
+                f"Não foi possível abrir o Manual do Usuário: {exc}",
+                parent=self,
+            )
 
     def to_word(self) -> None:
         source = self._pick_pdf("Escolha o PDF")
@@ -691,13 +770,21 @@ class CentralApp(tk.Tk):
         source = self._pick_pdf("Escolha o PDF protegido")
         if not source:
             return
-        dialog = PasswordDialog(self, "Desproteger PDF", confirm=False)
+        dialog = UnprotectOptionsDialog(self)
         self.wait_window(dialog)
         if dialog.result is None:
             return
         output = self._save_pdf("Salvar PDF sem senha", f"{Path(source).stem}_sem_senha.pdf")
         if output:
-            self._run("Removendo proteção do PDF...", unprotect_pdf, source, output, dialog.result)
+            opening_password, owner_password = dialog.result
+            self._run(
+                "Removendo as proteções do PDF...",
+                unprotect_pdf,
+                source,
+                output,
+                opening_password,
+                owner_password,
+            )
 
     def diagnose_scanners(self) -> None:
         self._run(
@@ -771,7 +858,20 @@ class CentralApp(tk.Tk):
         return answer["value"]
 
     def scan_by_ip(self) -> None:
-        dialog = IPScanDialog(self, find_tesseract(app_directory()) is not None, _load_last_scanner_ip())
+        scanners = _load_network_scanners()
+        if not scanners:
+            messagebox.showwarning(
+                APP_TITLE,
+                "Nenhum scanner de rede foi cadastrado. Solicite a um administrador que abra Configurações e cadastre o equipamento.",
+                parent=self,
+            )
+            return
+        dialog = IPScanDialog(
+            self,
+            find_tesseract(app_directory()) is not None,
+            scanners,
+            _load_last_scanner_ip(),
+        )
         self.wait_window(dialog)
         if dialog.result is None:
             return
@@ -1025,39 +1125,149 @@ class BatchSeparationDialog(BaseDialog):
         self.destroy()
 
 
+class NetworkScannerEntryDialog(BaseDialog):
+    def __init__(self, parent: tk.Misc, scanner: dict[str, str] | None = None) -> None:
+        super().__init__(parent, "Cadastrar scanner de rede")
+        values = scanner or {}
+        ttk.Label(self.body, text="Nome do scanner").grid(
+            row=0, column=0, sticky="w", padx=(0, 12), pady=5
+        )
+        self.name = ttk.Entry(self.body, width=38)
+        self.name.insert(0, values.get("nome", ""))
+        self.name.grid(row=0, column=1, pady=5)
+        ttk.Label(self.body, text="Endereço IP").grid(
+            row=1, column=0, sticky="w", padx=(0, 12), pady=5
+        )
+        self.address = ttk.Entry(self.body, width=38)
+        self.address.insert(0, values.get("ip", ""))
+        self.address.grid(row=1, column=1, pady=5)
+        ttk.Label(
+            self.body,
+            text="Exemplo: 10.40.10.8. O equipamento deve estar na rede local.",
+            foreground="#476582",
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        (self.name if not values.get("nome") else self.address).focus_set()
+        self.bind("<Return>", lambda _event: self.accept())
+        self.buttons(self.accept)
+
+    def accept(self) -> None:
+        name = self.name.get().strip()
+        if not name:
+            messagebox.showerror(APP_TITLE, "Informe o nome do scanner.", parent=self)
+            return
+        try:
+            address, _, _ = validate_ip_settings(self.address.get(), 80, "http")
+        except ESCLScannerError as exc:
+            messagebox.showerror(APP_TITLE, str(exc), parent=self)
+            return
+        self.result = {"nome": name, "ip": address}
+        self.destroy()
+
+
 class OutputSettingsDialog(BaseDialog):
     ALLOWED_FIELDS = {"serie", "data", "hora", "setor"}
 
-    def __init__(self, parent: tk.Misc, settings: dict) -> None:
-        super().__init__(parent, "Pasta e nomenclatura")
-        ttk.Label(self.body, text="Pasta padrão").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=5)
+    def __init__(self, parent: tk.Misc, settings: dict, scanners: list[dict[str, str]]) -> None:
+        super().__init__(parent, "Configurações administrativas")
+        self.scanners = [dict(item) for item in scanners]
+        network = ttk.LabelFrame(self.body, text="Scanners de rede cadastrados", padding=8)
+        network.grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0, 12))
+        self.scanner_list = ttk.Treeview(
+            network, columns=("nome", "ip"), show="headings", height=5, selectmode="browse"
+        )
+        self.scanner_list.heading("nome", text="Nome")
+        self.scanner_list.heading("ip", text="Endereço IP")
+        self.scanner_list.column("nome", width=320, anchor="w")
+        self.scanner_list.column("ip", width=150, anchor="center")
+        self.scanner_list.grid(row=0, column=0, columnspan=3, sticky="nsew")
+        scrollbar = ttk.Scrollbar(network, orient="vertical", command=self.scanner_list.yview)
+        scrollbar.grid(row=0, column=3, sticky="ns")
+        self.scanner_list.configure(yscrollcommand=scrollbar.set)
+        ttk.Button(network, text="Adicionar", command=self._add_scanner).grid(row=1, column=0, sticky="w", pady=(7, 0))
+        ttk.Button(network, text="Editar", command=self._edit_scanner).grid(row=1, column=1, sticky="w", padx=6, pady=(7, 0))
+        ttk.Button(network, text="Remover", command=self._remove_scanner).grid(row=1, column=2, sticky="w", pady=(7, 0))
+        network.columnconfigure(0, weight=1)
+        self._refresh_scanners()
+
+        ttk.Separator(self.body).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        ttk.Label(self.body, text="Pasta padrão").grid(row=2, column=0, sticky="w", padx=(0, 12), pady=5)
         folder_row = ttk.Frame(self.body)
-        folder_row.grid(row=0, column=1, sticky="ew", pady=5)
+        folder_row.grid(row=2, column=1, sticky="ew", pady=5)
         self.folder = ttk.Entry(folder_row, width=42)
         self.folder.insert(0, str(settings.get("pasta_saida", "")))
         self.folder.pack(side="left", fill="x", expand=True)
         ttk.Button(folder_row, text="Escolher...", command=self._choose_folder).pack(side="left", padx=(6, 0))
-        ttk.Label(self.body, text="Modelo do nome").grid(row=1, column=0, sticky="w", padx=(0, 12), pady=5)
+        ttk.Label(self.body, text="Modelo do nome").grid(row=3, column=0, sticky="w", padx=(0, 12), pady=5)
         self.template = ttk.Entry(self.body, width=53)
         self.template.insert(0, str(settings.get("modelo_nome", DEFAULT_OUTPUT_SETTINGS["modelo_nome"])))
-        self.template.grid(row=1, column=1, sticky="ew", pady=5)
-        ttk.Label(self.body, text="Setor").grid(row=2, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.template.grid(row=3, column=1, sticky="ew", pady=5)
+        ttk.Label(self.body, text="Setor").grid(row=4, column=0, sticky="w", padx=(0, 12), pady=5)
         self.sector = ttk.Entry(self.body, width=35)
         self.sector.insert(0, str(settings.get("setor", "")))
-        self.sector.grid(row=2, column=1, sticky="w", pady=5)
+        self.sector.grid(row=4, column=1, sticky="w", pady=5)
         self.automatic = tk.BooleanVar(value=bool(settings.get("salvar_automaticamente", False)))
         ttk.Checkbutton(
             self.body, text="Salvar automaticamente na pasta padrão após a pré-visualização",
             variable=self.automatic,
-        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(10, 0))
         ttk.Label(
             self.body,
             text="Campos disponíveis: {serie}, {data}, {hora} e {setor}.\n"
                  "Exemplo: Scan_{serie}_{data}_{hora}_{setor}",
             foreground="#476582",
-        ).grid(row=4, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(10, 0))
         self.body.columnconfigure(1, weight=1)
         self.buttons(self.accept)
+
+    def _refresh_scanners(self) -> None:
+        self.scanner_list.delete(*self.scanner_list.get_children())
+        for index, scanner in enumerate(self.scanners):
+            self.scanner_list.insert("", "end", iid=str(index), values=(scanner["nome"], scanner["ip"]))
+
+    def _selected_scanner_index(self) -> int | None:
+        selected = self.scanner_list.selection()
+        return int(selected[0]) if selected else None
+
+    def _add_scanner(self) -> None:
+        dialog = NetworkScannerEntryDialog(self)
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
+        if any(item["ip"] == dialog.result["ip"] for item in self.scanners):
+            messagebox.showerror(APP_TITLE, "Este endereço IP já está cadastrado.", parent=self)
+            return
+        self.scanners.append(dialog.result)
+        self._refresh_scanners()
+        self.scanner_list.selection_set(str(len(self.scanners) - 1))
+
+    def _edit_scanner(self) -> None:
+        index = self._selected_scanner_index()
+        if index is None:
+            messagebox.showinfo(APP_TITLE, "Selecione um scanner para editar.", parent=self)
+            return
+        dialog = NetworkScannerEntryDialog(self, self.scanners[index])
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
+        if any(position != index and item["ip"] == dialog.result["ip"] for position, item in enumerate(self.scanners)):
+            messagebox.showerror(APP_TITLE, "Este endereço IP já está cadastrado.", parent=self)
+            return
+        self.scanners[index] = dialog.result
+        self._refresh_scanners()
+        self.scanner_list.selection_set(str(index))
+
+    def _remove_scanner(self) -> None:
+        index = self._selected_scanner_index()
+        if index is None:
+            messagebox.showinfo(APP_TITLE, "Selecione um scanner para remover.", parent=self)
+            return
+        scanner = self.scanners[index]
+        if not messagebox.askyesno(
+            APP_TITLE, f"Remover o scanner '{scanner['nome']}' ({scanner['ip']})?", parent=self
+        ):
+            return
+        self.scanners.pop(index)
+        self._refresh_scanners()
 
     def _choose_folder(self) -> None:
         selected = filedialog.askdirectory(parent=self, title="Escolha a pasta padrão")
@@ -1096,9 +1306,10 @@ class OutputSettingsDialog(BaseDialog):
             "salvar_automaticamente": bool(self.automatic.get()),
         }
         try:
-            data = _read_settings()
+            data = _read_machine_settings()
             data["saida_digitalizacao"] = values
-            _write_settings(data)
+            data["scanners_rede"] = self.scanners
+            _write_machine_settings(data)
         except OSError as exc:
             messagebox.showerror(APP_TITLE, f"Não foi possível salvar as configurações: {exc}", parent=self)
             return
@@ -1189,8 +1400,8 @@ class PasswordDialog(BaseDialog):
 class ProtectOptionsDialog(BaseDialog):
     def __init__(self, parent: tk.Misc) -> None:
         super().__init__(parent, "Proteger PDF")
-        self.require_opening = tk.BooleanVar(value=True)
-        self.restrict_editing = tk.BooleanVar(value=True)
+        self.require_opening = tk.BooleanVar(value=False)
+        self.restrict_editing = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             self.body,
             text="Exigir senha para abrir o PDF",
@@ -1224,6 +1435,7 @@ class ProtectOptionsDialog(BaseDialog):
         self.open_password.focus_set()
         self.bind("<Return>", lambda _event: self.accept())
         self.buttons(self.accept)
+        self.update_fields()
 
     def update_fields(self) -> None:
         opening_state = "normal" if self.require_opening.get() else "disabled"
@@ -1251,6 +1463,66 @@ class ProtectOptionsDialog(BaseDialog):
             messagebox.showerror(APP_TITLE, "Use senhas diferentes para abertura e proprietário.", parent=self)
             return
         self.result = (open_password, owner_password, editing)
+        self.destroy()
+
+
+class UnprotectOptionsDialog(BaseDialog):
+    def __init__(self, parent: tk.Misc) -> None:
+        super().__init__(parent, "Desproteger PDF")
+        self.unlock_opening = tk.BooleanVar(value=False)
+        self.unlock_editing = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            self.body,
+            text="Desbloquear a abertura do PDF",
+            variable=self.unlock_opening,
+            command=self.update_fields,
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 7))
+        ttk.Label(self.body, text="Senha de abertura").grid(
+            row=1, column=0, sticky="w", padx=(0, 12), pady=4
+        )
+        self.opening_password = ttk.Entry(self.body, width=34, show="•")
+        self.opening_password.grid(row=1, column=1, pady=4)
+
+        ttk.Separator(self.body).grid(row=2, column=0, columnspan=2, sticky="ew", pady=10)
+        ttk.Checkbutton(
+            self.body,
+            text="Desbloquear edição, seleção e cópia",
+            variable=self.unlock_editing,
+            command=self.update_fields,
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(0, 7))
+        ttk.Label(self.body, text="Senha de edição/proprietário").grid(
+            row=4, column=0, sticky="w", padx=(0, 12), pady=4
+        )
+        self.owner_password = ttk.Entry(self.body, width=34, show="•")
+        self.owner_password.grid(row=4, column=1, pady=4)
+        ttk.Label(
+            self.body,
+            text="As senhas podem ser diferentes. Marque e preencha as proteções que deseja remover.",
+            wraplength=500,
+        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        self.bind("<Return>", lambda _event: self.accept())
+        self.buttons(self.accept)
+        self.update_fields()
+
+    def update_fields(self) -> None:
+        self.opening_password.configure(state="normal" if self.unlock_opening.get() else "disabled")
+        self.owner_password.configure(state="normal" if self.unlock_editing.get() else "disabled")
+
+    def accept(self) -> None:
+        opening = self.unlock_opening.get()
+        editing = self.unlock_editing.get()
+        if not opening and not editing:
+            messagebox.showerror(APP_TITLE, "Escolha ao menos uma proteção para remover.", parent=self)
+            return
+        opening_password = self.opening_password.get() if opening else ""
+        owner_password = self.owner_password.get() if editing else ""
+        if opening and not opening_password:
+            messagebox.showerror(APP_TITLE, "Informe a senha de abertura.", parent=self)
+            return
+        if editing and not owner_password:
+            messagebox.showerror(APP_TITLE, "Informe a senha de edição/proprietário.", parent=self)
+            return
+        self.result = (opening_password, owner_password)
         self.destroy()
 
 
@@ -1623,20 +1895,36 @@ class IPScanDialog(BaseDialog):
         "FeederDuplex": "Alimentador superior - frente e verso",
     }
 
-    def __init__(self, parent: tk.Misc, ocr_available: bool, last_ip: str = "") -> None:
+    def __init__(
+        self,
+        parent: tk.Misc,
+        ocr_available: bool,
+        scanners: list[dict[str, str]],
+        preferred_ip: str = "",
+    ) -> None:
         super().__init__(parent, "Scanner de rede")
         self.ocr_available = ocr_available
+        self.scanners = scanners
         self.profiles = _load_scan_profiles()
         self._source_results: queue.Queue[tuple[str, str, object]] = queue.Queue()
         self._detect_after = None
         self._detected_ip = ""
         self._detected_name = ""
         self._detected_serial = ""
-        ttk.Label(self.body, text="IP da multifuncional").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=5)
-        self.ip_address = ttk.Entry(self.body, width=35)
-        self.ip_address.insert(0, last_ip)
-        self.ip_address.grid(row=0, column=1, pady=5)
-        self.ip_address.focus_set()
+        ttk.Label(self.body, text="Scanner cadastrado").grid(
+            row=0, column=0, sticky="w", padx=(0, 12), pady=5
+        )
+        self.scanner_values = [f"{item['nome']} — {item['ip']}" for item in scanners]
+        self.scanner_choice = ttk.Combobox(
+            self.body, state="readonly", values=self.scanner_values, width=42
+        )
+        selected_index = next(
+            (index for index, item in enumerate(scanners) if item["ip"] == preferred_ip), 0
+        )
+        self.scanner_choice.current(selected_index)
+        self.scanner_choice.grid(row=0, column=1, pady=5)
+        self.scanner_choice.bind("<<ComboboxSelected>>", self._scanner_changed)
+        self.address = scanners[selected_index]["ip"]
 
         ttk.Label(self.body, text="Resolução").grid(row=1, column=0, sticky="w", padx=(0, 12), pady=5)
         self.dpi = ttk.Combobox(self.body, state="readonly", values=("150", "200", "300", "400", "600"), width=32)
@@ -1672,7 +1960,7 @@ class IPScanDialog(BaseDialog):
         self.language.grid(row=6, column=1, pady=5)
         self.detection_status = ttk.Label(
             self.body,
-            text="Digite o IP para detectar vidro e alimentador.",
+            text="Detectando as opções do scanner cadastrado...",
             foreground="#476582",
             wraplength=560,
             justify="left",
@@ -1698,12 +1986,17 @@ class IPScanDialog(BaseDialog):
         ttk.Button(profile_row, text="Salvar novo", command=self._save_profile).pack(side="left")
         ttk.Button(profile_row, text="Excluir", command=self._delete_profile).pack(side="left", padx=(5, 0))
         self._apply_profile()
-        self.ip_address.bind("<KeyRelease>", self._schedule_detection)
         self.bind("<Return>", lambda _event: self.accept())
         self.buttons(self.accept)
         self.after(100, self._poll_source_results)
-        if last_ip:
-            self._schedule_detection(delay=150)
+        self._schedule_detection(delay=150)
+
+    def _scanner_changed(self, _event=None) -> None:
+        index = self.scanner_choice.current()
+        if index < 0:
+            return
+        self.address = self.scanners[index]["ip"]
+        self._schedule_detection(delay=150)
 
     def _schedule_detection(self, _event=None, *, delay: int = 700) -> None:
         if self._detect_after is not None:
@@ -1713,15 +2006,15 @@ class IPScanDialog(BaseDialog):
         self._detected_serial = ""
         self.source.set("")
         self.source.configure(state="disabled", values=())
-        self.detection_status.configure(text="Aguardando o endereço IP...")
+        self.detection_status.configure(text="Aguardando a detecção do scanner...")
         self._detect_after = self.after(delay, self._start_detection)
 
     def _start_detection(self) -> None:
         self._detect_after = None
         try:
-            address, _, _ = validate_ip_settings(self.ip_address.get(), 80, "http")
+            address, _, _ = validate_ip_settings(self.address, 80, "http")
         except ESCLScannerError:
-            self.detection_status.configure(text="Digite um endereço IP válido.")
+            self.detection_status.configure(text="O scanner cadastrado possui um endereço IP inválido.")
             return
         self.detection_status.configure(text="Detectando vidro e alimentador...")
 
@@ -1792,7 +2085,7 @@ class IPScanDialog(BaseDialog):
         except queue.Empty:
             self.after(100, self._poll_source_results)
             return
-        if address == self.ip_address.get().strip():
+        if address == self.address:
             if kind == "ok":
                 scanner_name, serial_number, sources = payload
                 values = [self.SOURCE_LABELS[source] for source in sources]
@@ -1814,7 +2107,7 @@ class IPScanDialog(BaseDialog):
 
     def accept(self) -> None:
         try:
-            address, port, protocol = validate_ip_settings(self.ip_address.get(), 80, "http")
+            address, port, protocol = validate_ip_settings(self.address, 80, "http")
         except ESCLScannerError as exc:
             messagebox.showerror(APP_TITLE, str(exc), parent=self)
             return
@@ -1842,6 +2135,33 @@ class IPScanDialog(BaseDialog):
         self.destroy()
 
 
+def _run_administrative_settings() -> None:
+    root = tk.Tk()
+    root.withdraw()
+    root.title(f"{APP_TITLE} - Configurações administrativas")
+    try:
+        png_icon = resource_path("assets/pdf_scanner_feather.png")
+        ico_icon = resource_path("assets/pdf_scanner_feather.ico")
+        if png_icon.is_file():
+            root._window_icon = tk.PhotoImage(file=str(png_icon))  # type: ignore[attr-defined]
+            root.iconphoto(True, root._window_icon)  # type: ignore[attr-defined]
+        if sys.platform == "win32" and ico_icon.is_file():
+            root.iconbitmap(default=str(ico_icon))
+    except tk.TclError:
+        pass
+    if sys.platform == "win32" and not is_process_elevated():
+        messagebox.showerror(
+            APP_TITLE,
+            "As configurações somente podem ser alteradas com credenciais administrativas.",
+            parent=root,
+        )
+        root.destroy()
+        return
+    dialog = OutputSettingsDialog(root, _load_output_settings(), _load_network_scanners())
+    root.wait_window(dialog)
+    root.destroy()
+
+
 def main() -> None:
     if sys.platform == "win32":
         try:
@@ -1850,8 +2170,11 @@ def main() -> None:
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ALAP.PDFScanner")
         except (AttributeError, OSError):
             pass
-    app = CentralApp()
-    app.mainloop()
+    if "--configuracoes" in sys.argv:
+        _run_administrative_settings()
+    else:
+        app = CentralApp()
+        app.mainloop()
 
 
 if __name__ == "__main__":

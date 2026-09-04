@@ -78,11 +78,11 @@ def _friendly_network_error(exc: Exception) -> ESCLScannerError:
             )
         if exc.code == 409:
             return ESCLScannerError(
-                "A multifuncional esta ocupada, possui outro trabalho ativo, o alimentador esta sem papel "
-                "ou recusou a configuracao escolhida. Coloque as folhas, aguarde alguns segundos e tente novamente."
+                "A multifuncional está ocupada, possui outro trabalho ativo, o alimentador está sem papel "
+                "ou recusou a configuração escolhida. Coloque as folhas, aguarde alguns segundos e tente novamente."
             )
         if exc.code == 503:
-            return ESCLScannerError("A multifuncional esta temporariamente ocupada. Aguarde e tente novamente.")
+            return ESCLScannerError("A multifuncional está temporariamente ocupada. Aguarde e tente novamente.")
         return ESCLScannerError(f"A multifuncional respondeu com erro HTTP {exc.code}.")
     return ESCLScannerError(
         "Não foi possível acessar a multifuncional. Confira o IP, a porta, o protocolo e se o computador está na mesma rede."
@@ -237,7 +237,7 @@ def _create_scan_job(
             raise
         except (OSError, urllib.error.URLError) as exc:
             raise _friendly_network_error(exc) from exc
-    raise ESCLScannerError("A multifuncional permaneceu ocupada apos varias tentativas.")
+    raise ESCLScannerError("A multifuncional permaneceu ocupada após várias tentativas.")
 
 
 def _next_document(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+import math
 from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -26,8 +27,20 @@ def selection_after_click(
     return {position}, position
 
 
+def merge_window_size(page_count: int, screen_width: int, screen_height: int) -> tuple[int, int]:
+    """Dimensiona a janela para até cinco colunas e três linhas visíveis."""
+    columns = max(1, min(5, page_count))
+    rows = max(1, math.ceil(max(1, page_count) / columns))
+    desired_width = max(900, columns * 175 + 80)
+    desired_height = max(520, 190 + min(3, rows) * 220)
+    return (
+        min(desired_width, max(720, screen_width - 50)),
+        min(desired_height, max(520, screen_height - 70)),
+    )
+
+
 class ThumbnailDialog(tk.Toplevel):
-    """Janela visual centralizada para escolher paginas de PDF."""
+    """Janela visual centralizada para escolher páginas de PDF."""
 
     def __init__(self, parent: tk.Misc, title: str) -> None:
         super().__init__(parent)
@@ -60,9 +73,9 @@ class ThumbnailDialog(tk.Toplevel):
 class PageSelectionDialog(ThumbnailDialog):
     def __init__(self, parent: tk.Misc, source: str | Path, mode: str) -> None:
         titles = {
-            "remove": "Remover paginas - escolha pelas miniaturas",
+            "remove": "Remover páginas - escolha pelas miniaturas",
             "divide": "Dividir PDF - escolha pelas miniaturas",
-            "rotate": "Girar paginas - escolha pelas miniaturas",
+            "rotate": "Girar páginas - escolha pelas miniaturas",
             "trim": "Cortar margem superior/inferior",
         }
         super().__init__(parent, titles[mode])
@@ -76,7 +89,7 @@ class PageSelectionDialog(ThumbnailDialog):
 
         header = ttk.Frame(self, padding=(16, 12))
         header.pack(fill="x")
-        prompt = "Clique nas paginas desejadas. Clique novamente para desmarcar."
+        prompt = "Clique nas páginas desejadas. Clique novamente para desmarcar."
         if mode == "divide":
             prompt = "Use as miniaturas como referência e informe os intervalos que formarão arquivos separados."
         ttk.Label(header, text=prompt, font=("Segoe UI", 10, "bold")).pack(side="left")
@@ -94,7 +107,7 @@ class PageSelectionDialog(ThumbnailDialog):
             self.intervals.pack(side="left")
             ttk.Label(controls, text="Ex.: 1-3,4-6,7-10").pack(side="left", padx=(8, 0))
         if mode == "rotate":
-            ttk.Label(controls, text="Rotacao:").pack(side="left", padx=(18, 5))
+            ttk.Label(controls, text="Rotação:").pack(side="left", padx=(18, 5))
             self.degrees = ttk.Combobox(controls, state="readonly", values=("90", "180", "270"), width=8)
             self.degrees.set("90")
             self.degrees.pack(side="left")
@@ -126,7 +139,7 @@ class PageSelectionDialog(ThumbnailDialog):
             card = tk.Button(
                 self.grid,
                 image=photo,
-                text=f"Pagina {index + 1}",
+                text=f"Página {index + 1}",
                 compound="top",
                 bg="white",
                 activebackground="#dbeafe",
@@ -178,7 +191,7 @@ class PageSelectionDialog(ThumbnailDialog):
             self.close(keep_result=True)
             return
         if not self.selected:
-            messagebox.showerror("PDF & Scanner", "Selecione ao menos uma pagina.", parent=self)
+            messagebox.showerror("PDF & Scanner", "Selecione ao menos uma página.", parent=self)
             return
         spec = ",".join(str(index + 1) for index in sorted(self.selected))
         if self.mode == "rotate":
@@ -190,7 +203,7 @@ class PageSelectionDialog(ThumbnailDialog):
                 if top < 0 or bottom < 0 or top + bottom <= 0:
                     raise ValueError
             except ValueError:
-                messagebox.showerror("PDF & Scanner", "Informe cortes validos em centimetros.", parent=self)
+                messagebox.showerror("PDF & Scanner", "Informe cortes válidos em centímetros.", parent=self)
                 return
             self.result = (top, bottom, spec)
         else:
@@ -206,7 +219,7 @@ class PageSelectionDialog(ThumbnailDialog):
 
 class MergePagesDialog(ThumbnailDialog):
     def __init__(self, parent: tk.Misc, sources: list[str]) -> None:
-        super().__init__(parent, "Juntar PDFs - organize as paginas")
+        super().__init__(parent, "Juntar PDFs - organize as páginas")
         self.refs: list[tuple[str, int]] = []
         self.photos: list[ImageTk.PhotoImage] = []
         self.selected_indices: set[int] = {0}
@@ -235,7 +248,7 @@ class MergePagesDialog(ThumbnailDialog):
         ttk.Button(tools, text="Limpar", command=self.clear_selection).pack(side="left", padx=6)
         ttk.Button(tools, text="Mover antes", command=lambda: self.move(-1)).pack(side="left")
         ttk.Button(tools, text="Mover depois", command=lambda: self.move(1)).pack(side="left", padx=6)
-        ttk.Button(tools, text="Remover da uniao", command=self.remove).pack(side="left")
+        ttk.Button(tools, text="Remover da união", command=self.remove).pack(side="left")
 
         container = ttk.Frame(self)
         container.pack(fill="both", expand=True, padx=16)
@@ -243,7 +256,7 @@ class MergePagesDialog(ThumbnailDialog):
         vertical = ttk.Scrollbar(container, orient="vertical", command=self.canvas.yview)
         self.grid = tk.Frame(self.canvas, bg="#eef3f8")
         self.grid.bind("<Configure>", lambda _e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self.canvas.create_window((0, 0), window=self.grid, anchor="nw")
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.grid, anchor="nw")
         self.canvas.configure(yscrollcommand=vertical.set)
         self.canvas.pack(side="left", fill="both", expand=True)
         vertical.pack(side="right", fill="y")
@@ -259,9 +272,9 @@ class MergePagesDialog(ThumbnailDialog):
         self.after_idle(self._show_responsive)
 
     def _show_responsive(self) -> None:
-        # Mesmo enquadramento usado pelas demais janelas de miniaturas.
-        width = min(980, self.winfo_screenwidth() - 50)
-        height = min(740, self.winfo_screenheight() - 70)
+        width, height = merge_window_size(
+            len(self.refs), self.winfo_screenwidth(), self.winfo_screenheight()
+        )
         self.show_centered(width, height)
         self.after_idle(lambda: self._layout_buttons(self.canvas.winfo_width()))
 
@@ -269,6 +282,9 @@ class MergePagesDialog(ThumbnailDialog):
         # Cinco páginas por linha no tamanho normal, reduzindo apenas quando o
         # usuário estreitar a janela.
         columns = max(1, min(5, (max(165, available_width) - 10) // 165))
+        self.canvas.itemconfigure(self.canvas_window, width=max(1, available_width))
+        for column in range(5):
+            self.grid.columnconfigure(column, weight=1 if column < columns else 0)
         for position, button in enumerate(self.buttons):
             button.grid_configure(
                 row=position // columns,
@@ -289,7 +305,7 @@ class MergePagesDialog(ThumbnailDialog):
             button = tk.Button(
                 self.grid,
                 image=photo,
-                text=f"{position + 1}. {Path(source).name}\nPagina {page_index + 1}",
+                text=f"{position + 1}. {Path(source).name}\nPágina {page_index + 1}",
                 compound="top",
                 bg="#93c5fd" if position in self.selected_indices else "white",
                 relief="solid",

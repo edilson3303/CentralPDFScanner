@@ -80,16 +80,16 @@ def merge_pdfs(inputs: Sequence[str | Path], output_pdf: str | Path) -> Path:
 
 
 def merge_pdf_pages(page_refs: Sequence[tuple[str | Path, int]], output_pdf: str | Path) -> Path:
-    """Une paginas individuais, preservando a ordem visual escolhida."""
+    """Une páginas individuais, preservando a ordem visual escolhida."""
     if not page_refs:
-        raise PDFToolError("Selecione ao menos uma pagina.")
+        raise PDFToolError("Selecione ao menos uma página.")
     readers: dict[Path, PdfReader] = {}
     writer = PdfWriter()
     for source_value, index in page_refs:
         source = _ensure_pdf(source_value)
         reader = readers.setdefault(source, PdfReader(str(source)))
         if index < 0 or index >= len(reader.pages):
-            raise PDFToolError(f"A pagina {index + 1} nao existe em {source.name}.")
+            raise PDFToolError(f"A página {index + 1} não existe em {source.name}.")
         writer.add_page(reader.pages[index])
     return _write_pdf(writer, output_pdf)
 
@@ -319,7 +319,7 @@ def protect_pdf(
     owner_password: str = "",
     restrict_editing: bool = False,
 ) -> Path:
-    """Protege a abertura e/ou bloqueia edicao, selecao e copia com AES-256."""
+    """Protege a abertura e/ou bloqueia edição, seleção e cópia com AES-256."""
     if not open_password and not restrict_editing:
         raise PDFToolError("Escolha proteção de abertura e/ou de edição.")
     if open_password and len(open_password) < 4:
@@ -353,20 +353,31 @@ def protect_pdf(
 def unprotect_pdf(
     input_pdf: str | Path,
     output_pdf: str | Path,
-    password: str,
+    opening_password: str = "",
+    owner_password: str = "",
 ) -> Path:
-    """Remove a criptografia quando a senha fornecida é válida."""
-    if not password:
-        raise PDFToolError("Informe a senha do PDF.")
-    reader = PdfReader(str(_ensure_pdf(input_pdf)))
-    if not reader.is_encrypted:
+    """Tenta as senhas de abertura e de proprietário e remove a criptografia."""
+    passwords = list(dict.fromkeys(value for value in (owner_password, opening_password) if value))
+    if not passwords:
+        raise PDFToolError("Informe a senha de abertura e/ou a senha de edição do PDF.")
+    source = _ensure_pdf(input_pdf)
+    initial = PdfReader(str(source))
+    if not initial.is_encrypted:
         raise PDFToolError("Este PDF não possui proteção por senha.")
-    try:
-        result = reader.decrypt(password)
-    except Exception as exc:
-        raise PDFToolError("Não foi possível abrir o PDF com essa senha.") from exc
-    if int(result) == 0:
-        raise PDFToolError("Senha incorreta.")
+    reader = None
+    last_error: Exception | None = None
+    for password in passwords:
+        candidate = PdfReader(str(source))
+        try:
+            if int(candidate.decrypt(password)) > 0:
+                reader = candidate
+                break
+        except Exception as exc:
+            last_error = exc
+    if reader is None:
+        if last_error is not None:
+            raise PDFToolError("Não foi possível abrir o PDF com as senhas informadas.") from last_error
+        raise PDFToolError("As senhas informadas estão incorretas.")
     writer = PdfWriter()
     writer.clone_document_from_reader(reader)
     return _write_pdf(writer, output_pdf)
