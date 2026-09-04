@@ -10,28 +10,36 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: windows-latest
     steps:
       - name: Baixar projeto
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Configurar Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: "3.12"
       - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
+          python -m pip install pip-audit bandit
       - name: Executar testes
         run: python -m unittest discover -s tests -v
+      - name: Auditar dependencias
+        run: python -m pip_audit -r requirements.txt
+      - name: Auditar codigo
+        run: bandit -r central_pdf_scanner -ll
       - name: Preparar OCR portatil
         run: |
           choco install tesseract --yes --no-progress
           choco install innosetup --yes --no-progress
           $tessdata = "C:\Program Files\Tesseract-OCR\tessdata"
-          Invoke-WebRequest -Uri "https://github.com/tesseract-ocr/tessdata_fast/raw/main/por.traineddata" -OutFile "$tessdata\por.traineddata"
+          Invoke-WebRequest -Uri "https://github.com/tesseract-ocr/tessdata_fast/raw/87416418657359cb625c412a48b6e1d6d41c29bd/por.traineddata" -OutFile "$tessdata\por.traineddata"
       - name: Gerar executavel
         run: |
           pyinstaller --noconfirm --clean --windowed --name CentralPDFScanner --icon "assets\pdf_scanner_feather.ico" --add-data "assets\logo_assembleia_legislativa_amapa.png;assets" --add-data "assets\pdf_scanner_feather.png;assets" --add-data "assets\pdf_scanner_feather.ico;assets" --collect-all fitz --collect-all pypdf --collect-all pdf2docx --hidden-import cv2 --hidden-import win32com.client app.py
@@ -45,12 +53,12 @@ jobs:
       - name: Gerar instalador do Windows
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss'
       - name: Publicar pacote
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: CentralPDFScanner_Portable_Windows
           path: dist/CentralPDFScanner_Portable.zip
       - name: Publicar instalador
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: PDF_Scanner_ALAP_Instalador_Windows
-          path: dist/installer/PDF_Scanner_ALAP_Setup_v2.5.5.exe
+          path: dist/installer/PDF_Scanner_ALAP_Setup_v2.5.6.exe

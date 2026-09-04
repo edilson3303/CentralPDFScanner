@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import ipaddress
-import ssl
 import tempfile
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Callable
 
 import fitz
+from defusedxml import ElementTree as ET
 from PIL import Image
 
 from .ocr import images_to_searchable_pdf
@@ -26,6 +25,9 @@ CAPABILITIES_PATH = "/eSCL/ScannerCapabilities"
 SCAN_JOBS_PATH = "/eSCL/ScanJobs"
 SCAN_NAMESPACE = "http://schemas.hp.com/imaging/escl/2011/05/03"
 PWG_NAMESPACE = "http://www.pwg.org/schemas/2010/12/sm"
+MAX_CAPABILITIES_BYTES = 2_000_000
+MAX_DOCUMENT_BYTES = 256 * 1024 * 1024
+MAX_SCAN_PAGES = 1000
 
 
 def validate_ip_settings(ip_address: str, port: int, protocol: str = "http") -> tuple[str, int, str]:
@@ -34,6 +36,8 @@ def validate_ip_settings(ip_address: str, port: int, protocol: str = "http") -> 
         parsed = ipaddress.ip_address(address)
     except ValueError as exc:
         raise ESCLScannerError("Digite um endereço IP válido, por exemplo: 192.168.1.50.") from exc
+    if not (parsed.is_private or parsed.is_loopback or parsed.is_link_local):
+        raise ESCLScannerError("Por segurança, informe um endereço IP da rede local.")
     if not 1 <= int(port) <= 65535:
         raise ESCLScannerError("A porta deve estar entre 1 e 65535.")
     scheme = protocol.strip().lower()
@@ -48,14 +52,14 @@ def _base_url(ip_address: str, port: int, protocol: str) -> str:
     return f"{scheme}://{host}:{port}"
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        return None
+
+
 def _opener(protocol: str) -> urllib.request.OpenerDirector:
     handlers: list[urllib.request.BaseHandler] = [urllib.request.ProxyHandler({})]
-    if protocol == "https":
-        # Multifuncionais normalmente usam certificado local/autossinado.
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        handlers.append(urllib.request.HTTPSHandler(context=context))
+    handlers.append(_NoRedirect())
     return urllib.request.build_opener(*handlers)
 
 
@@ -90,9 +94,11 @@ def _read_capabilities(ip_address: str, port: int, protocol: str, timeout: int) 
     )
     try:
         with _opener(protocol).open(request, timeout=timeout) as response:
-            content = response.read(2_000_000)
+            content = response.read(MAX_CAPABILITIES_BYTES + 1)
     except (OSError, urllib.error.URLError, urllib.error.HTTPError) as exc:
         raise _friendly_network_error(exc) from exc
+    if len(content) > MAX_CAPABILITIES_BYTES:
+        raise ESCLScannerError("A resposta de recursos da multifuncional excedeu o limite permitido.")
     if b"ScannerCapabilities" not in content:
         raise ESCLScannerError("O endereço respondeu, mas não foi identificado como scanner eSCL/AirScan.")
     return content
@@ -179,9 +185,12 @@ def _scan_settings(dpi: int, color_mode: str, input_source: str = "Platen") -> b
 
 def _job_url(base: str, location: str) -> str:
     parsed = urllib.parse.urlparse(urllib.parse.urljoin(base + "/", location))
+    path = parsed.path.rstrip("/")
+    if not path.startswith(SCAN_JOBS_PATH + "/"):
+        raise ESCLScannerError("A multifuncional devolveu um endereço de trabalho inválido.")
     # Alguns equipamentos devolvem seu nome DNS no Location. Mantemos o caminho,
     # mas usamos o IP informado para evitar falha de resolução desse nome local.
-    return base + parsed.path.rstrip("/")
+    return base + path
 
 
 def _create_scan_job(
@@ -233,7 +242,10 @@ def _next_document(
     for attempt in range(6):
         try:
             with opener.open(request, timeout=timeout) as response:
-                return response.read(), response.headers.get_content_type().lower()
+                data = response.read(MAX_DOCUMENT_BYTES + 1)
+                if len(data) > MAX_DOCUMENT_BYTES:
+                    raise ESCLScannerError("A página recebida excedeu o limite de tamanho permitido.")
+                return data, response.headers.get_content_type().lower()
         except urllib.error.HTTPError as exc:
             if allow_end and exc.code in (404, 410):
                 return None
@@ -253,6 +265,8 @@ def _document_to_images(data: bytes, content_type: str, destination: Path, page_
     if content_type == "application/pdf" or data.startswith(b"%PDF"):
         document = fitz.open(stream=data, filetype="pdf")
         try:
+            if page_start - 1 + document.page_count > MAX_SCAN_PAGES:
+                raise ESCLScannerError(f"A digitalização excedeu o limite de {MAX_SCAN_PAGES} páginas.")
             matrix = fitz.Matrix(dpi / 72.0, dpi / 72.0)
             for offset, page in enumerate(document):
                 target = destination / f"ip_scan_{page_start + offset:04d}.jpg"
@@ -267,6 +281,8 @@ def _document_to_images(data: bytes, content_type: str, destination: Path, page_
     try:
         with Image.open(source) as image:
             frame_count = getattr(image, "n_frames", 1)
+            if page_start - 1 + frame_count > MAX_SCAN_PAGES:
+                raise ESCLScannerError(f"A digitalização excedeu o limite de {MAX_SCAN_PAGES} páginas.")
             for offset in range(frame_count):
                 image.seek(offset)
                 target = destination / f"ip_scan_{page_start + offset:04d}.jpg"
@@ -301,7 +317,7 @@ def scan_escl_to_pdf(
         scanned_pages = 0
         if input_source in {"Feeder", "FeederDuplex"}:
             opener, job_url = _create_scan_job(base, protocol, dpi, color_mode, input_source, timeout=180)
-            while scanned_pages < 1000:
+            while scanned_pages < MAX_SCAN_PAGES:
                 document = _next_document(opener, job_url, timeout=180, allow_end=True)
                 if document is None:
                     break

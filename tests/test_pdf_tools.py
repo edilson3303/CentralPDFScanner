@@ -257,6 +257,14 @@ class PDFToolsTests(unittest.TestCase):
             validate_ip_settings("impressora.local", 80, "http")
         with self.assertRaises(ESCLScannerError):
             validate_ip_settings("192.168.1.50", 70000, "http")
+        with self.assertRaisesRegex(ESCLScannerError, "rede local"):
+            validate_ip_settings("8.8.8.8", 80, "http")
+
+    def test_escl_rejects_invalid_job_location(self) -> None:
+        from central_pdf_scanner.escl_scanner import _job_url
+
+        with self.assertRaisesRegex(ESCLScannerError, "trabalho inválido"):
+            _job_url("http://192.168.1.50:80", "http://example.com/outro/caminho")
 
     def test_escl_probe_and_scan_to_pdf(self) -> None:
         server = ThreadingHTTPServer(("127.0.0.1", 0), FakeESCLHandler)

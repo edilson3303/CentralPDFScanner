@@ -58,6 +58,15 @@ def app_directory() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def settings_directory() -> Path:
+    """Retorna uma pasta gravável para as preferências do usuário."""
+    if sys.platform == "win32":
+        local_appdata = os.environ.get("LOCALAPPDATA")
+        if local_appdata:
+            return Path(local_appdata) / "ALAP" / "PDFScanner"
+    return app_directory()
+
+
 def resource_path(relative: str) -> Path:
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         return Path(sys._MEIPASS) / relative  # type: ignore[attr-defined]
@@ -66,7 +75,7 @@ def resource_path(relative: str) -> Path:
 
 def _load_last_scanner_ip() -> str:
     try:
-        data = json.loads((app_directory() / "configuracao.json").read_text(encoding="utf-8"))
+        data = json.loads((settings_directory() / "configuracao.json").read_text(encoding="utf-8"))
         address, _, _ = validate_ip_settings(str(data.get("ultimo_ip_scanner", "")), 80, "http")
         return address
     except (OSError, ValueError, TypeError, json.JSONDecodeError, ESCLScannerError):
@@ -74,9 +83,11 @@ def _load_last_scanner_ip() -> str:
 
 
 def _save_last_scanner_ip(ip_address: str) -> None:
-    target = app_directory() / "configuracao.json"
+    directory = settings_directory()
+    target = directory / "configuracao.json"
     temporary = target.with_suffix(".tmp")
     try:
+        directory.mkdir(parents=True, exist_ok=True)
         temporary.write_text(
             json.dumps({"ultimo_ip_scanner": ip_address}, ensure_ascii=False, indent=2),
             encoding="utf-8",
