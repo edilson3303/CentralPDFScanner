@@ -220,19 +220,22 @@ class MergePagesDialog(ThumbnailDialog):
             finally:
                 document.close()
 
+        header = ttk.Frame(self, padding=(16, 12))
+        header.pack(fill="x")
         ttk.Label(
-            self,
+            header,
             text="Selecione páginas com clique, Ctrl+clique ou Shift+clique. Depois, altere a ordem ou remova.",
-            padding=(16, 12),
             font=("Segoe UI", 10, "bold"),
-        ).pack(fill="x")
+        ).pack(side="left")
+        self.summary = ttk.Label(header, text="")
+        self.summary.pack(side="right")
         tools = ttk.Frame(self, padding=(16, 0, 16, 8))
         tools.pack(fill="x")
+        ttk.Button(tools, text="Selecionar todas", command=self.select_all).pack(side="left")
+        ttk.Button(tools, text="Limpar", command=self.clear_selection).pack(side="left", padx=6)
         ttk.Button(tools, text="Mover antes", command=lambda: self.move(-1)).pack(side="left")
         ttk.Button(tools, text="Mover depois", command=lambda: self.move(1)).pack(side="left", padx=6)
         ttk.Button(tools, text="Remover da uniao", command=self.remove).pack(side="left")
-        self.summary = ttk.Label(tools, text="")
-        self.summary.pack(side="right")
 
         container = ttk.Frame(self)
         container.pack(fill="both", expand=True, padx=16)
@@ -256,13 +259,16 @@ class MergePagesDialog(ThumbnailDialog):
         self.after_idle(self._show_responsive)
 
     def _show_responsive(self) -> None:
-        width = min(1180, self.winfo_screenwidth() - 60)
-        height = min(780, self.winfo_screenheight() - 80)
+        # Mesmo enquadramento usado pelas demais janelas de miniaturas.
+        width = min(980, self.winfo_screenwidth() - 50)
+        height = min(740, self.winfo_screenheight() - 70)
         self.show_centered(width, height)
         self.after_idle(lambda: self._layout_buttons(self.canvas.winfo_width()))
 
     def _layout_buttons(self, available_width: int) -> None:
-        columns = max(1, min(6, (max(180, available_width) - 20) // 180))
+        # Cinco páginas por linha no tamanho normal, reduzindo apenas quando o
+        # usuário estreitar a janela.
+        columns = max(1, min(5, (max(165, available_width) - 10) // 165))
         for position, button in enumerate(self.buttons):
             button.grid_configure(
                 row=position // columns,
@@ -297,6 +303,18 @@ class MergePagesDialog(ThumbnailDialog):
         self.summary.configure(
             text=f"{len(self.selected_indices)} selecionada(s) de {len(self.refs)} página(s)"
         )
+
+    def select_all(self) -> None:
+        self.selected_indices = set(range(len(self.refs)))
+        self.selection_anchor = 0 if self.refs else None
+        self.redraw()
+
+    def clear_selection(self) -> None:
+        self.selected_indices.clear()
+        self.selection_anchor = None
+        for button in self.buttons:
+            button.configure(bg="white")
+        self.summary.configure(text=f"0 selecionada(s) de {len(self.refs)} página(s)")
 
     def choose(self, event: tk.Event, position: int) -> str:
         self.selected_indices, self.selection_anchor = selection_after_click(

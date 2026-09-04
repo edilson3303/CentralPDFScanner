@@ -1,5 +1,5 @@
 #define MyAppName "PDF & Scanner"
-#define MyAppVersion "2.7.3"
+#define MyAppVersion "2.7.4"
 #define MyAppPublisher "Assembleia Legislativa do Estado do Amapá - ALAP"
 #define MyAppExeName "CentralPDFScanner.exe"
 
@@ -14,7 +14,7 @@ DefaultGroupName=PDF Scanner ALAP
 DisableProgramGroupPage=yes
 LicenseFile=LICENCA.txt
 OutputDir=dist\installer
-OutputBaseFilename=PDF_Scanner_ALAP_Setup_v2.7.3
+OutputBaseFilename=PDF_Scanner_ALAP_Setup_v2.7.4
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -24,7 +24,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 SetupIconFile=assets\pdf_scanner_feather.ico
 UninstallDisplayIcon={app}\pdf_scanner_feather.ico
 ChangesAssociations=yes
-VersionInfoVersion=2.7.3.0
+VersionInfoVersion=2.7.4.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=Digitalização, OCR, edição e conversão de documentos
 VersionInfoProductName={#MyAppName}

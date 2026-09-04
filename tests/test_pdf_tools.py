@@ -243,8 +243,8 @@ class PDFToolsTests(unittest.TestCase):
         self.assertEqual(image.read_bytes(), original)
 
     def test_scanner_diagnostic_does_not_require_a_scanner(self) -> None:
-        report = build_scanner_diagnostic("2.7.3", self.root)
-        self.assertIn("Versão do software: 2.7.3", report)
+        report = build_scanner_diagnostic("2.7.4", self.root)
+        self.assertIn("Versão do software: 2.7.4", report)
         self.assertIn("SCANNERS INSTALADOS NO WINDOWS", report)
         self.assertIn("não contém imagens nem conteúdo", report)
 
