@@ -198,7 +198,7 @@ class MergePagesDialog(ThumbnailDialog):
             try:
                 for index, page in enumerate(document):
                     self.refs.append((source, index))
-                    self.photos.append(self.render_page(page, (115, 150)))
+                    self.photos.append(self.render_page(page))
             finally:
                 document.close()
 
@@ -216,19 +216,15 @@ class MergePagesDialog(ThumbnailDialog):
 
         container = ttk.Frame(self)
         container.pack(fill="both", expand=True, padx=16)
-        container.rowconfigure(0, weight=1)
-        container.columnconfigure(0, weight=1)
         self.canvas = tk.Canvas(container, bg="#eef3f8", highlightthickness=0)
         vertical = ttk.Scrollbar(container, orient="vertical", command=self.canvas.yview)
-        horizontal = ttk.Scrollbar(container, orient="horizontal", command=self.canvas.xview)
         self.grid = tk.Frame(self.canvas, bg="#eef3f8")
         self.grid.bind("<Configure>", lambda _e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.create_window((0, 0), window=self.grid, anchor="nw")
-        self.canvas.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
-        self.canvas.grid(row=0, column=0, sticky="nsew")
-        vertical.grid(row=0, column=1, sticky="ns")
-        horizontal.grid(row=1, column=0, sticky="ew")
-        self.canvas.bind("<Shift-MouseWheel>", lambda e: self.canvas.xview_scroll(int(-e.delta / 120), "units"))
+        self.canvas.configure(yscrollcommand=vertical.set)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        vertical.pack(side="right", fill="y")
+        self.canvas.bind_all("<MouseWheel>", lambda e: self.canvas.yview_scroll(int(-e.delta / 120), "units"))
         self.buttons: list[tk.Button] = []
         self.redraw()
 
@@ -236,7 +232,7 @@ class MergePagesDialog(ThumbnailDialog):
         footer.pack(fill="x")
         ttk.Button(footer, text="Cancelar", command=self.destroy).pack(side="right")
         ttk.Button(footer, text="Juntar", command=self.accept).pack(side="right", padx=8)
-        self.after_idle(lambda: self.show_centered(1120, 620))
+        self.after_idle(lambda: self.show_centered(980, 700))
 
     def redraw(self) -> None:
         for widget in self.grid.winfo_children():
@@ -256,7 +252,7 @@ class MergePagesDialog(ThumbnailDialog):
                 pady=5,
                 command=lambda value=position: self.choose(value),
             )
-            button.grid(row=0, column=position, padx=7, pady=7, sticky="n")
+            button.grid(row=position // 5, column=position % 5, padx=10, pady=10, sticky="n")
             self.buttons.append(button)
 
     def choose(self, position: int) -> None:
