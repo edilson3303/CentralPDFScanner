@@ -33,11 +33,12 @@ from central_pdf_scanner.escl_scanner import (
     ESCLScannerError,
     detect_escl_sources,
     detect_escl_info,
+    detect_escl_details,
     probe_escl_scanner,
     scan_escl_to_pdf,
     validate_ip_settings,
 )
-from central_pdf_scanner.scanner import _sources_from_wia_capabilities
+from central_pdf_scanner.scanner import ScannerDevice, _serial_from_wia_properties, _sources_from_wia_capabilities
 from central_pdf_scanner.word_tools import pdf_to_word
 from central_pdf_scanner.ocr import find_tesseract, images_to_searchable_pdf
 from central_pdf_scanner.word_tools import word_to_pdf
@@ -62,6 +63,7 @@ class FakeESCLHandler(BaseHTTPRequestHandler):
         if self.path == "/eSCL/ScannerCapabilities":
             content = (
                 b'<scan:ScannerCapabilities xmlns:scan="http://schemas.hp.com/imaging/escl/2011/05/03">'
+                b'<scan:SerialNumber>LXM123456</scan:SerialNumber>'
                 b'<scan:Platen><scan:PlatenInputCaps /></scan:Platen>'
                 b'<scan:Adf><scan:AdfSimplexInputCaps /><scan:AdfDuplexInputCaps /></scan:Adf>'
                 b'</scan:ScannerCapabilities>'
@@ -225,6 +227,17 @@ class PDFToolsTests(unittest.TestCase):
         self.assertFalse(bool(reader.user_access_permissions & UserAccessPermissions.MODIFY))
         self.assertFalse(bool(reader.user_access_permissions & UserAccessPermissions.EXTRACT))
 
+    def test_scanner_serial_number_detection(self) -> None:
+        class Property:
+            def __init__(self, name: str, value: str) -> None:
+                self.Name = name
+                self.Value = value
+
+        properties = [Property("Nome", "Scanner"), Property("Número de série", "LXM987654")]
+        self.assertEqual(_serial_from_wia_properties(properties), "LXM987654")
+        device = ScannerDevice("id", "Lexmark", "Rede", ("Vidro",), "LXM987654")
+        self.assertIn("Série: LXM987654", device.display_name)
+
     def test_scanner_connection_type_labels(self) -> None:
         self.assertEqual(_detect_connection_type(r"USBSCAN\\VID_1234"), "USB / conectado")
         self.assertEqual(_detect_connection_type("SWD DAFWSDProvider WSD Scanner"), "Rede")
@@ -258,6 +271,10 @@ class PDFToolsTests(unittest.TestCase):
             name, sources = detect_escl_info("127.0.0.1", port)
             self.assertEqual(name, "Scanner_127.0.0.1")
             self.assertEqual(sources, ("Platen", "Feeder", "FeederDuplex"))
+            model, serial_number, detail_sources = detect_escl_details("127.0.0.1", port)
+            self.assertEqual(model, "Scanner_127.0.0.1")
+            self.assertEqual(serial_number, "LXM123456")
+            self.assertEqual(detail_sources, sources)
             output = scan_escl_to_pdf(
                 "127.0.0.1",
                 port,

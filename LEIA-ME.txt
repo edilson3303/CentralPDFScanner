@@ -1,4 +1,4 @@
-PDF & SCANNER 2.5.3
+PDF & SCANNER 2.5.4
 =================
 
 COMO ABRIR A VERSAO PORTATIL
@@ -59,7 +59,8 @@ EDICAO VISUAL
 - O corte superior/inferior e informado em centimetros.
 
 NOME E FORMATO DA DIGITALIZACAO
-- O nome sugerido segue Scan_NomeDoScanner_AAAA-MM-DD_HH-MM-SS.pdf.
+- O nome sugerido segue Scan_NumeroDeSerie_AAAA-MM-DD_HH-MM-SS.pdf.
+- Se o driver ou a multifuncional nao informar a serie, sera usado SEM_NUMERO_DE_SERIE.
 - A digitalizacao pode ser salva em PDF ou em arquivos JPG por pagina.
 
 LICENCA

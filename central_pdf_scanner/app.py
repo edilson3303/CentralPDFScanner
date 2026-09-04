@@ -16,7 +16,7 @@ from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 
 from . import __version__
-from .escl_scanner import ESCLScannerError, detect_escl_info, scan_escl_to_pdf, validate_ip_settings
+from .escl_scanner import ESCLScannerError, detect_escl_details, scan_escl_to_pdf, validate_ip_settings
 from .ocr import find_tesseract, pdf_to_searchable_pdf
 from .pdf_tools import (
     crop_pdf,
@@ -47,11 +47,10 @@ OCR_LANGUAGES = {
 }
 
 
-def default_scan_basename(scanner_name: str) -> str:
-    safe = re.sub(r'[<>:"/\\|?*]+', "_", scanner_name).strip(" ._") or "Scanner"
+def default_scan_basename(serial_number: str) -> str:
+    safe = re.sub(r'[<>:"/\\|?*]+', "_", serial_number).strip(" ._") or "SEM_NUMERO_DE_SERIE"
     safe = re.sub(r"\s+", "_", safe)
     return f"Scan_{safe}_{datetime.now():%Y-%m-%d_%H-%M-%S}"
-
 
 def app_directory() -> Path:
     if getattr(sys, "frozen", False):
@@ -445,8 +444,8 @@ class CentralApp(tk.Tk):
         self.wait_window(dialog)
         if dialog.result is None:
             return
-        device_id, device_name, dpi, color, input_source, output_format, use_ocr, language = dialog.result
-        basename = default_scan_basename(device_name)
+        device_id, device_name, serial_number, dpi, color, input_source, output_format, use_ocr, language = dialog.result
+        basename = default_scan_basename(serial_number)
         if output_format == "PDF":
             output = self._save_pdf("Salvar digitalização", f"{basename}.pdf")
         else:
@@ -491,9 +490,9 @@ class CentralApp(tk.Tk):
         self.wait_window(dialog)
         if dialog.result is None:
             return
-        ip_address, scanner_name, port, protocol, dpi, color, input_source, output_format, use_ocr, language = dialog.result
+        ip_address, scanner_name, serial_number, port, protocol, dpi, color, input_source, output_format, use_ocr, language = dialog.result
         _save_last_scanner_ip(ip_address)
-        basename = default_scan_basename(scanner_name)
+        basename = default_scan_basename(serial_number)
         if output_format == "PDF":
             output = self._save_pdf("Salvar digitalização por IP", f"{basename}.pdf")
         else:
@@ -960,6 +959,7 @@ class ScanDialog(BaseDialog):
         self.result = (
             self.devices[index].device_id,
             self.devices[index].name,
+            self.devices[index].serial_number,
             int(self.combos[1].get()),
             self.combos[2].get(),
             self.source.get(),
@@ -983,6 +983,7 @@ class IPScanDialog(BaseDialog):
         self._detect_after = None
         self._detected_ip = ""
         self._detected_name = ""
+        self._detected_serial = ""
         ttk.Label(self.body, text="IP da multifuncional").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=5)
         self.ip_address = ttk.Entry(self.body, width=35)
         self.ip_address.insert(0, last_ip)
@@ -1039,6 +1040,7 @@ class IPScanDialog(BaseDialog):
             self.after_cancel(self._detect_after)
         self._detected_ip = ""
         self._detected_name = ""
+        self._detected_serial = ""
         self.source.set("")
         self.source.configure(state="disabled", values=())
         self.detection_status.configure(text="Aguardando o endereço IP...")
@@ -1055,7 +1057,7 @@ class IPScanDialog(BaseDialog):
 
         def worker() -> None:
             try:
-                info = detect_escl_info(address, 80, "http")
+                info = detect_escl_details(address, 80, "http")
                 self._source_results.put((address, "ok", info))
             except Exception as exc:
                 self._source_results.put((address, "error", str(exc)))
@@ -1070,13 +1072,17 @@ class IPScanDialog(BaseDialog):
             return
         if address == self.ip_address.get().strip():
             if kind == "ok":
-                scanner_name, sources = payload
+                scanner_name, serial_number, sources = payload
                 values = [self.SOURCE_LABELS[source] for source in sources]
                 self.source.configure(state="readonly", values=values)
                 self.source.current(0)
                 self._detected_ip = address
                 self._detected_name = scanner_name
-                self.detection_status.configure(text=f"{scanner_name} - origens detectadas automaticamente.")
+                self._detected_serial = serial_number
+                serial_status = f"série {serial_number}" if serial_number else "número de série não informado"
+                self.detection_status.configure(
+                    text=f"{scanner_name} — {serial_status} — origens detectadas automaticamente."
+                )
             else:
                 self.detection_status.configure(text=str(payload))
         self.after(100, self._poll_source_results)
@@ -1095,6 +1101,7 @@ class IPScanDialog(BaseDialog):
         self.result = (
             address,
             self._detected_name or f"Scanner_{address}",
+            self._detected_serial,
             port,
             protocol,
             int(self.dpi.get()),

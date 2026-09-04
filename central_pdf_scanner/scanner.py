@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -23,10 +24,28 @@ class ScannerDevice:
     name: str
     connection_type: str
     sources: tuple[str, ...] = ("Vidro",)
+    serial_number: str = ""
 
     @property
     def display_name(self) -> str:
-        return f"[{self.connection_type}] {self.name}"
+        serial = f" — Série: {self.serial_number}" if self.serial_number else ""
+        return f"[{self.connection_type}] {self.name}{serial}"
+
+
+def _serial_from_wia_properties(properties) -> str:
+    """Extrai somente um número de série explicitamente informado pelo driver."""
+    try:
+        for prop in properties:
+            name = unicodedata.normalize("NFKD", str(getattr(prop, "Name", "")))
+            normalized_name = "".join(character for character in name if not unicodedata.combining(character)).casefold()
+            if "serial" not in normalized_name and "serie" not in normalized_name:
+                continue
+            value = str(getattr(prop, "Value", "")).strip()
+            if value and value.casefold() not in {"0", "unknown", "desconhecido", "n/a", "none"}:
+                return value
+    except Exception:
+        pass
+    return ""
 
 
 def _win32_client():
@@ -47,6 +66,7 @@ def list_scanners() -> list[ScannerDevice]:
         name = str(info.Properties("Name").Value)
         device_id = str(info.DeviceID)
         details = [device_id, name]
+        serial_number = _serial_from_wia_properties(info.Properties)
         try:
             details.extend(str(prop.Value) for prop in info.Properties)
         except Exception:
@@ -55,12 +75,14 @@ def list_scanners() -> list[ScannerDevice]:
         sources = ("Vidro",)
         try:
             device = info.Connect()
+            if not serial_number:
+                serial_number = _serial_from_wia_properties(device.Properties)
             capabilities = _property(device, 3086)
             if capabilities is not None:
                 sources = _sources_from_wia_capabilities(int(capabilities.Value))
         except Exception:
             pass
-        devices.append(ScannerDevice(device_id, name, connection_type, sources))
+        devices.append(ScannerDevice(device_id, name, connection_type, sources, serial_number))
     return devices
 
 

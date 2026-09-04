@@ -98,12 +98,12 @@ def _read_capabilities(ip_address: str, port: int, protocol: str, timeout: int) 
     return content
 
 
-def detect_escl_info(
+def detect_escl_details(
     ip_address: str,
     port: int = 80,
     protocol: str = "http",
     timeout: int = 8,
-) -> tuple[str, tuple[str, ...]]:
+) -> tuple[str, str, tuple[str, ...]]:
     content = _read_capabilities(ip_address, port, protocol, timeout)
     try:
         root = ET.fromstring(content)
@@ -112,11 +112,14 @@ def detect_escl_info(
 
     names = {element.tag.rsplit("}", 1)[-1].lower() for element in root.iter()}
     model = ""
+    serial_number = ""
     for element in root.iter():
         tag = element.tag.rsplit("}", 1)[-1].lower()
-        if tag in {"makeandmodel", "model"} and element.text and element.text.strip():
-            model = element.text.strip()
-            break
+        value = element.text.strip() if element.text and element.text.strip() else ""
+        if not model and tag in {"makeandmodel", "model"} and value:
+            model = value
+        if not serial_number and tag in {"serialnumber", "deviceserialnumber", "serialno", "serial"} and value:
+            serial_number = value
     sources: list[str] = []
     if any(name in names for name in ("platen", "plateninputcaps")):
         sources.append("Platen")
@@ -125,8 +128,17 @@ def detect_escl_info(
     if "adfduplexinputcaps" in names:
         sources.append("FeederDuplex")
     # Alguns equipamentos omitem a seção Platen, embora o vidro esteja disponível.
-    return model or f"Scanner_{ip_address}", tuple(sources) or ("Platen",)
+    return model or f"Scanner_{ip_address}", serial_number, tuple(sources) or ("Platen",)
 
+
+def detect_escl_info(
+    ip_address: str,
+    port: int = 80,
+    protocol: str = "http",
+    timeout: int = 8,
+) -> tuple[str, tuple[str, ...]]:
+    model, _serial_number, sources = detect_escl_details(ip_address, port, protocol, timeout)
+    return model, sources
 
 def detect_escl_sources(
     ip_address: str, port: int = 80, protocol: str = "http", timeout: int = 8

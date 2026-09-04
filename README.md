@@ -1,8 +1,8 @@
 # PDF & Scanner
 
-Versão atual: 2.5.3
+Versão atual: 2.5.4
 
-Esta versão atualiza a licença institucional, revisa ortografia e concordância e exibe os termos com alinhamento justificado na janela Licença.
+Esta versão usa o número de série informado pelo scanner no nome automático dos arquivos digitalizados.
 
 Também oferece Word editável compatível com LibreOffice, OCR executado silenciosamente em segundo plano e instalador para Windows.
 
@@ -19,7 +19,7 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 - Digitalizar frente e verso quando o alimentador da multifuncional oferecer duplex
 - Memorizar o último IP de multifuncional utilizado
 - Escolher na lista scanners de rede, USB ou outros scanners instalados no Windows
-- Salvar a digitalização em PDF ou JPG, com nome automático contendo scanner, data e hora
+- Salvar a digitalização em PDF ou JPG, com nome automático contendo número de série, data e hora
 - Escolher digitalização normal ou PDF pesquisável com OCR; idiomas aparecem por nome completo
 - Trabalhar visualmente com miniaturas ao remover, juntar, dividir, girar ou cortar páginas
 - Cortar margens superior e inferior em centímetros
@@ -50,7 +50,7 @@ Depois de extraído, o pacote abre por `CentralPDFScanner.exe` sem instalar Pyth
 
 ## Gerar o instalador do Windows
 
-O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.5.3.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
+O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.5.4.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
 
 ## Digitalizar digitando o IP
 
