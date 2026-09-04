@@ -103,16 +103,29 @@ def _save_last_scanner_ip(ip_address: str) -> None:
 class CentralApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
+        self.withdraw()
         self._configure_window_icon()
         self.title(f"{APP_TITLE} {__version__}")
-        self.geometry("1040x780")
         self.minsize(820, 680)
         self.configure(bg="#f4f7fb")
         self._results: queue.Queue[tuple[str, object]] = queue.Queue()
         self._busy = False
         self._configure_style()
         self._build_ui()
+        self._center_main_window()
+        self.deiconify()
         self.after(100, self._poll_results)
+
+    def _center_main_window(self) -> None:
+        """Abre a janela principal centralizada e ajustada à tela disponível."""
+        self.update_idletasks()
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        width = min(1040, max(820, screen_width - 40))
+        height = min(780, max(680, screen_height - 80))
+        x = max(0, (screen_width - width) // 2)
+        y = max(0, (screen_height - height) // 2)
+        self.geometry(f"{width}x{height}+{x}+{y}")
 
     def _configure_window_icon(self) -> None:
         """Usa a mesma pena na janela, nos dialogos e na barra de tarefas."""
