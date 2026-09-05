@@ -75,8 +75,8 @@ class PageSelectionDialog(ThumbnailDialog):
         titles = {
             "remove": "Remover páginas - escolha pelas miniaturas",
             "divide": "Dividir PDF - escolha pelas miniaturas",
-            "rotate": "Girar páginas - escolha pelas miniaturas",
-            "trim": "Cortar margem superior/inferior",
+            "rotate": "Rotacionar páginas - escolha pelas miniaturas",
+            "trim": "Cortar páginas - margem superior/inferior",
         }
         super().__init__(parent, titles[mode])
         self.source = Path(source)

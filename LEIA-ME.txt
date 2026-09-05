@@ -1,4 +1,4 @@
-PDF & SCANNER 2.8.2
+PDF & SCANNER 2.8.3
 =================
 
 COMO ABRIR A VERSÃO PORTÁTIL
@@ -28,6 +28,8 @@ SCANNERS DE REDE
 - A digitalização direta exige eSCL/AirScan (Mopria). Se o equipamento não for
   compatível, instale o driver WIA completo do fabricante e use "Scanner USB".
 - O último scanner escolhido fica gravado nas preferências do usuário.
+- O tamanho do papel pode ser Automático, A4, Carta, Ofício, Legal, A3 ou A5.
+- Testar scanner verifica todos os equipamentos cadastrados e oculta IPs e dados internos no relatório.
 
 SCANNER USB
 - O scanner deve aparecer em Configurações do Windows > Bluetooth e dispositivos
@@ -58,7 +60,7 @@ REVISÃO DA DIGITALIZAÇÃO
 - O modo padrão é Cor.
 
 EDIÇÃO VISUAL
-- Remover páginas, Juntar PDFs, Dividir PDF, Girar páginas e Cortar PDF exibem
+- Remover páginas, Juntar PDFs, Dividir PDF, Rotacionar páginas e Cortar páginas exibem
   miniaturas.
 - A janela de Juntar PDFs é redimensionada automaticamente, usa cinco colunas e
   possui rolagem vertical.

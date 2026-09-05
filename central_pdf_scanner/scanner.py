@@ -11,6 +11,7 @@ from .ocr import images_to_searchable_pdf
 from .pdf_tools import images_to_pdf, save_images_as_jpg
 from .scan_processing import prepare_scanned_images
 from .progress import ProgressCallback, check_cancel, report
+from .scan_options import PAPER_SIZES_MM, paper_size_pixels
 
 
 class ScannerError(RuntimeError):
@@ -134,6 +135,7 @@ def scan_to_pdf(
     dpi: int = 300,
     color_mode: str = "Cor",
     input_source: str = "Vidro",
+    paper_size: str = "Automático (área máxima)",
     use_ocr: bool = False,
     language: str = "por+eng",
     app_dir: str | Path | None = None,
@@ -168,6 +170,8 @@ def scan_to_pdf(
     }
     if input_source not in source_codes:
         raise ScannerError("Origem de digitalização inválida.")
+    if paper_size not in PAPER_SIZES_MM:
+        raise ScannerError("Tamanho de papel inválido.")
     with tempfile.TemporaryDirectory(prefix="central_pdf_scan_") as temp:
         images: list[Path] = []
         page_number = 1
@@ -181,6 +185,14 @@ def scan_to_pdf(
             _set_property(item, 6146, color_codes.get(color_mode, 1))
             _set_property(item, 6147, dpi)
             _set_property(item, 6148, dpi)
+            dimensions = paper_size_pixels(paper_size, dpi)
+            if dimensions is not None:
+                width, height = dimensions
+                _set_property(item, 3097, 0)  # WIA_PAGE_CUSTOM
+                _set_property(item, 6149, 0)  # WIA_IPS_XPOS
+                _set_property(item, 6150, 0)  # WIA_IPS_YPOS
+                _set_property(item, 6151, width)  # WIA_IPS_XEXTENT
+                _set_property(item, 6152, height)  # WIA_IPS_YEXTENT
             try:
                 image = item.Transfer(WIA_FORMAT_JPEG)
             except Exception as exc:

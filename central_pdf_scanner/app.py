@@ -38,6 +38,7 @@ from .pdf_tools import (
     unprotect_pdf,
 )
 from .scanner import list_scanners, scan_to_pdf
+from .scan_options import PAPER_SIZES_MM
 from .progress import OperationCancelled
 from .security import is_process_elevated, is_windows_administrator, launch_elevated_settings
 from .word_tools import pdf_to_word, word_to_pdf
@@ -57,27 +58,27 @@ DEFAULT_SCAN_PROFILES = {
     "Documento padrão": {
         "dpi": "300", "color": "Cor", "output_format": "PDF", "use_ocr": False,
         "language": "Português + Inglês", "remove_blank": False, "auto_deskew": False,
-        "auto_orient": False, "source": "",
+        "auto_orient": False, "source": "", "paper_size": "Automático (área máxima)",
     },
     "Documento colorido": {
         "dpi": "300", "color": "Cor", "output_format": "PDF", "use_ocr": False,
         "language": "Português + Inglês", "remove_blank": False, "auto_deskew": False,
-        "auto_orient": False, "source": "",
+        "auto_orient": False, "source": "", "paper_size": "Automático (área máxima)",
     },
     "Frente e verso": {
         "dpi": "300", "color": "Cor", "output_format": "PDF", "use_ocr": False,
         "language": "Português + Inglês", "remove_blank": False, "auto_deskew": False,
-        "auto_orient": False, "source": "Alimentador superior - frente e verso",
+        "auto_orient": False, "source": "Alimentador superior - frente e verso", "paper_size": "A4 (210 × 297 mm)",
     },
     "OCR pesquisável": {
         "dpi": "300", "color": "Cor", "output_format": "PDF", "use_ocr": True,
         "language": "Português + Inglês", "remove_blank": False, "auto_deskew": False,
-        "auto_orient": False, "source": "",
+        "auto_orient": False, "source": "", "paper_size": "Automático (área máxima)",
     },
 }
 DEFAULT_OUTPUT_SETTINGS = {
     "pasta_saida": "",
-    "modelo_nome": "Scan_{serie}_{data}_{hora}",
+    "modelo_nome": "Scan_{serie}_{data}_{hora}_{setor}",
     "setor": "",
     "salvar_automaticamente": False,
 }
@@ -117,6 +118,10 @@ def _load_output_settings() -> dict:
         saved = _read_settings().get("saida_digitalizacao", {})
     if isinstance(saved, dict):
         result.update({key: saved[key] for key in result if key in saved})
+    # Migra silenciosamente o antigo modelo padrão, sem alterar modelos
+    # personalizados pelo administrador.
+    if result.get("modelo_nome") == "Scan_{serie}_{data}_{hora}":
+        result["modelo_nome"] = DEFAULT_OUTPUT_SETTINGS["modelo_nome"]
     return result
 
 
@@ -131,9 +136,9 @@ def default_scan_basename(serial_number: str, settings: dict | None = None) -> s
     }
     template = str(values.get("modelo_nome", DEFAULT_OUTPUT_SETTINGS["modelo_nome"]))
     try:
-        return _safe_filename(template.format(**fields), f"Scan_{fields['serie']}_{fields['data']}_{fields['hora']}")
+        return _safe_filename(template.format(**fields), f"Scan_{fields['serie']}_{fields['data']}_{fields['hora']}_{fields['setor']}")
     except (KeyError, ValueError):
-        return f"Scan_{fields['serie']}_{fields['data']}_{fields['hora']}"
+        return f"Scan_{fields['serie']}_{fields['data']}_{fields['hora']}_{fields['setor']}"
 
 def app_directory() -> Path:
     if getattr(sys, "frozen", False):
@@ -162,6 +167,60 @@ def resource_path(relative: str) -> Path:
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         return Path(sys._MEIPASS) / relative  # type: ignore[attr-defined]
     return app_directory() / relative
+
+
+def _apply_native_windows_icon(window: tk.Misc, ico_icon: Path) -> None:
+    """Força os ícones pequeno e grande da janela já criada pelo Windows."""
+    if sys.platform != "win32" or not ico_icon.is_file():
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        user32.LoadImageW.argtypes = (
+            wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT,
+            ctypes.c_int, ctypes.c_int, wintypes.UINT,
+        )
+        user32.LoadImageW.restype = wintypes.HANDLE
+        user32.GetAncestor.argtypes = (wintypes.HWND, wintypes.UINT)
+        user32.GetAncestor.restype = wintypes.HWND
+        user32.SendMessageW.argtypes = (
+            wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
+        )
+        user32.SendMessageW.restype = ctypes.c_ssize_t
+
+        load_from_file = 0x0010 | 0x8000  # LR_LOADFROMFILE | LR_SHARED
+        image_icon = 1
+        hwnd = user32.GetAncestor(window.winfo_id(), 2) or window.winfo_id()
+        large = user32.LoadImageW(None, str(ico_icon), image_icon, 32, 32, load_from_file)
+        small = user32.LoadImageW(None, str(ico_icon), image_icon, 16, 16, load_from_file)
+        if large:
+            user32.SendMessageW(hwnd, 0x0080, 1, large)  # WM_SETICON / ICON_BIG
+        if small:
+            user32.SendMessageW(hwnd, 0x0080, 0, small)  # WM_SETICON / ICON_SMALL
+        window._native_icon_handles = (large, small)  # type: ignore[attr-defined]
+    except (AttributeError, OSError, TypeError, ValueError):
+        pass
+
+
+def _apply_window_icon(window: tk.Misc) -> None:
+    """Aplica o ícone do produto pelo Tk e pela API nativa do Windows."""
+    png_icon = resource_path("assets/pdf_scanner_multifuncional_v282.png")
+    ico_icon = resource_path("assets/pdf_scanner_multifuncional_v282.ico")
+    try:
+        if png_icon.is_file():
+            photo = tk.PhotoImage(file=str(png_icon))
+            window._window_icon = photo  # type: ignore[attr-defined]
+            window.iconphoto(True, photo)  # type: ignore[attr-defined]
+    except tk.TclError:
+        pass
+    try:
+        if sys.platform == "win32" and ico_icon.is_file():
+            window.iconbitmap(str(ico_icon))  # type: ignore[attr-defined]
+    except tk.TclError:
+        pass
+    _apply_native_windows_icon(window, ico_icon)
 
 
 def _read_settings() -> dict:
@@ -282,6 +341,10 @@ class CentralApp(tk.Tk):
         self._build_ui()
         self._center_main_window()
         self.deiconify()
+        # O Windows cria o HWND definitivo ao exibir a janela. Reaplicamos o
+        # ícone depois desse momento para impedir o ícone genérico do Tk.
+        self.after_idle(self._configure_window_icon)
+        self.after(250, self._configure_window_icon)
         self.after(100, self._poll_results)
 
     def _center_main_window(self) -> None:
@@ -297,16 +360,7 @@ class CentralApp(tk.Tk):
 
     def _configure_window_icon(self) -> None:
         """Usa o mesmo ícone na janela, nos diálogos e na barra de tarefas."""
-        png_icon = resource_path("assets/pdf_scanner_multifuncional_v282.png")
-        ico_icon = resource_path("assets/pdf_scanner_multifuncional_v282.ico")
-        try:
-            if png_icon.is_file():
-                self._window_icon = tk.PhotoImage(file=str(png_icon))
-                self.iconphoto(True, self._window_icon)
-            if sys.platform == "win32" and ico_icon.is_file():
-                self.iconbitmap(default=str(ico_icon))
-        except tk.TclError:
-            pass
+        _apply_window_icon(self)
 
     def _configure_style(self) -> None:
         style = ttk.Style(self)
@@ -362,8 +416,8 @@ class CentralApp(tk.Tk):
                 ("Proteger PDF", self.protect),
                 ("Desproteger PDF", self.unprotect),
                 ("Remover páginas", self.remove),
-                ("Girar páginas", self.rotate),
-                ("Cortar PDF", self.trim),
+                ("Rotacionar páginas", self.rotate),
+                ("Cortar páginas", self.trim),
                 ("Compactar PDF", self.compress),
                 ("Separar em lotes", self.separate_batch),
             ],
@@ -792,7 +846,7 @@ class CentralApp(tk.Tk):
             build_scanner_diagnostic,
             __version__,
             app_directory(),
-            _load_last_scanner_ip(),
+            _load_network_scanners(),
             on_success=lambda report: DiagnosticDialog(self, str(report)),
         )
 
@@ -810,7 +864,7 @@ class CentralApp(tk.Tk):
         if dialog.result is None:
             return
         (
-            device_id, device_name, serial_number, dpi, color, input_source, output_format,
+            device_id, device_name, serial_number, dpi, color, input_source, paper_size, output_format,
             use_ocr, language, remove_blank, auto_deskew, auto_orient,
         ) = dialog.result
         output_settings = _load_output_settings()
@@ -825,6 +879,7 @@ class CentralApp(tk.Tk):
             dpi=dpi,
             color_mode=color,
             input_source=input_source,
+            paper_size=paper_size,
             use_ocr=use_ocr,
             language=language,
             app_dir=app_directory(),
@@ -877,7 +932,7 @@ class CentralApp(tk.Tk):
             return
         (
             ip_address, scanner_name, serial_number, port, protocol, dpi, color, input_source,
-            output_format, use_ocr, language, remove_blank, auto_deskew, auto_orient,
+            paper_size, output_format, use_ocr, language, remove_blank, auto_deskew, auto_orient,
         ) = dialog.result
         _save_last_scanner_ip(ip_address)
         output_settings = _load_output_settings()
@@ -894,6 +949,7 @@ class CentralApp(tk.Tk):
             dpi=dpi,
             color_mode=color,
             input_source=input_source,
+            paper_size=paper_size,
             use_ocr=use_ocr,
             language=language,
             app_dir=app_directory(),
@@ -1005,6 +1061,7 @@ class BaseDialog(tk.Toplevel):
         y = max(0, (self.winfo_screenheight() - height) // 2)
         self.geometry(f"{width}x{height}+{x}+{y}")
         self.deiconify()
+        _apply_window_icon(self)
         self.lift()
         self.grab_set()
 
@@ -1322,7 +1379,7 @@ class OutputSettingsDialog(BaseDialog):
 
 class CropDialog(BaseDialog):
     def __init__(self, parent: tk.Misc) -> None:
-        super().__init__(parent, "Cortar PDF")
+        super().__init__(parent, "Cortar páginas")
         self.entries: list[ttk.Entry] = []
         defaults = ("0", "0", "0", "0")
         for row, (label, default) in enumerate(zip(("Esquerda (mm)", "Superior (mm)", "Direita (mm)", "Inferior (mm)"), defaults)):
@@ -1350,7 +1407,7 @@ class CropDialog(BaseDialog):
 
 class RotateDialog(BaseDialog):
     def __init__(self, parent: tk.Misc) -> None:
-        super().__init__(parent, "Girar páginas")
+        super().__init__(parent, "Rotacionar páginas")
         ttk.Label(self.body, text="Rotação").grid(row=0, column=0, sticky="w", padx=(0, 12), pady=4)
         self.degrees = ttk.Combobox(self.body, state="readonly", values=("90", "180", "270"), width=15)
         self.degrees.set("90")
@@ -1601,6 +1658,7 @@ class DiagnosticDialog(BaseDialog):
         y = max(0, (self.winfo_screenheight() - height) // 2)
         self.geometry(f"{width}x{height}+{x}+{y}")
         self.deiconify()
+        _apply_window_icon(self)
         self.lift()
         self.grab_set()
 
@@ -1754,6 +1812,7 @@ class LicenseDialog(BaseDialog):
         y = max(0, (self.winfo_screenheight() - height) // 2)
         self.geometry(f"{width}x{height}+{x}+{y}")
         self.deiconify()
+        _apply_window_icon(self)
         self.lift()
         self.grab_set()
 
@@ -1777,34 +1836,40 @@ class ScanDialog(BaseDialog):
         self.source = ttk.Combobox(self.body, state="readonly", width=34)
         self.source.grid(row=3, column=1, pady=5)
         self._scanner_changed()
-        ttk.Label(self.body, text="Formato de saída").grid(row=4, column=0, sticky="w", padx=(0, 12), pady=5)
+        ttk.Label(self.body, text="Tamanho do papel").grid(row=4, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.paper_size = ttk.Combobox(
+            self.body, state="readonly", values=tuple(PAPER_SIZES_MM), width=34
+        )
+        self.paper_size.set("Automático (área máxima)")
+        self.paper_size.grid(row=4, column=1, pady=5)
+        ttk.Label(self.body, text="Formato de saída").grid(row=5, column=0, sticky="w", padx=(0, 12), pady=5)
         self.output_format = ttk.Combobox(self.body, state="readonly", values=("PDF", "JPG"), width=34)
         self.output_format.set("PDF")
-        self.output_format.grid(row=4, column=1, pady=5)
+        self.output_format.grid(row=5, column=1, pady=5)
         self.ocr = tk.BooleanVar(value=False)
         ocr_text = "Aplicar OCR (PDF pesquisável)" if ocr_available else "Aplicar OCR (Tesseract não encontrado)"
-        ttk.Checkbutton(self.body, text=ocr_text, variable=self.ocr, state="normal" if ocr_available else "disabled").grid(row=5, column=0, columnspan=2, sticky="w", pady=(10, 4))
-        ttk.Label(self.body, text="Idioma OCR").grid(row=6, column=0, sticky="w", padx=(0, 12), pady=5)
+        ttk.Checkbutton(self.body, text=ocr_text, variable=self.ocr, state="normal" if ocr_available else "disabled").grid(row=6, column=0, columnspan=2, sticky="w", pady=(10, 4))
+        ttk.Label(self.body, text="Idioma OCR").grid(row=7, column=0, sticky="w", padx=(0, 12), pady=5)
         self.language = ttk.Combobox(self.body, state="readonly", values=tuple(OCR_LANGUAGES), width=34)
         self.language.set("Português + Inglês")
-        self.language.grid(row=6, column=1, pady=5)
+        self.language.grid(row=7, column=1, pady=5)
         ttk.Label(
             self.body,
             text="A lista inclui scanners de rede e USB instalados no Windows.",
-        ).grid(row=7, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ).grid(row=8, column=0, columnspan=2, sticky="w", pady=(8, 0))
         self.remove_blank = tk.BooleanVar(value=False)
         self.auto_deskew = tk.BooleanVar(value=False)
         self.auto_orient = tk.BooleanVar(value=False)
-        ttk.Checkbutton(self.body, text="Remover páginas em branco automaticamente", variable=self.remove_blank).grid(row=8, column=0, columnspan=2, sticky="w", pady=(10, 2))
-        ttk.Checkbutton(self.body, text="Corrigir inclinação automaticamente", variable=self.auto_deskew).grid(row=9, column=0, columnspan=2, sticky="w", pady=2)
-        ttk.Checkbutton(self.body, text="Detectar e corrigir orientação", variable=self.auto_orient).grid(row=10, column=0, columnspan=2, sticky="w", pady=2)
+        ttk.Checkbutton(self.body, text="Remover páginas em branco automaticamente", variable=self.remove_blank).grid(row=9, column=0, columnspan=2, sticky="w", pady=(10, 2))
+        ttk.Checkbutton(self.body, text="Corrigir inclinação automaticamente", variable=self.auto_deskew).grid(row=10, column=0, columnspan=2, sticky="w", pady=2)
+        ttk.Checkbutton(self.body, text="Detectar e corrigir orientação", variable=self.auto_orient).grid(row=11, column=0, columnspan=2, sticky="w", pady=2)
         ttk.Label(
             self.body,
             text="As correções automáticas aumentam o tempo de processamento.",
             foreground="#6b7280",
-        ).grid(row=11, column=0, columnspan=2, sticky="w", pady=(3, 0))
+        ).grid(row=12, column=0, columnspan=2, sticky="w", pady=(3, 0))
         profile_row = ttk.LabelFrame(self.body, text="Perfil de digitalização", padding=8)
-        profile_row.grid(row=12, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        profile_row.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(10, 0))
         self.profile = ttk.Combobox(profile_row, state="readonly", values=tuple(self.profiles), width=24)
         self.profile.set("Documento padrão")
         self.profile.pack(side="left")
@@ -1825,6 +1890,7 @@ class ScanDialog(BaseDialog):
             "dpi": self.combos[1].get(), "color": self.combos[2].get(),
             "output_format": self.output_format.get(), "use_ocr": bool(self.ocr.get()),
             "language": self.language.get(), "source": self.source.get(),
+            "paper_size": self.paper_size.get(),
             "remove_blank": bool(self.remove_blank.get()), "auto_deskew": bool(self.auto_deskew.get()),
             "auto_orient": bool(self.auto_orient.get()),
         }
@@ -1836,6 +1902,8 @@ class ScanDialog(BaseDialog):
         self.combos[1].set(str(values.get("dpi", "300")))
         self.combos[2].set(str(values.get("color", "Cor")))
         self.output_format.set(str(values.get("output_format", "PDF")))
+        paper_size = str(values.get("paper_size", "Automático (área máxima)"))
+        self.paper_size.set(paper_size if paper_size in PAPER_SIZES_MM else "Automático (área máxima)")
         self.ocr.set(bool(values.get("use_ocr", False)) and self.ocr_available)
         language = str(values.get("language", "Português + Inglês"))
         if language in OCR_LANGUAGES:
@@ -1881,6 +1949,7 @@ class ScanDialog(BaseDialog):
             int(self.combos[1].get()),
             self.combos[2].get(),
             self.source.get(),
+            self.paper_size.get(),
             self.output_format.get(),
             bool(self.ocr.get()) if self.output_format.get() == "PDF" else False,
             OCR_LANGUAGES[self.language.get()],
@@ -1943,10 +2012,17 @@ class IPScanDialog(BaseDialog):
         self.source = ttk.Combobox(self.body, state="disabled", width=32)
         self.source.grid(row=3, column=1, pady=5)
 
-        ttk.Label(self.body, text="Formato de saída").grid(row=4, column=0, sticky="w", padx=(0, 12), pady=5)
+        ttk.Label(self.body, text="Tamanho do papel").grid(row=4, column=0, sticky="w", padx=(0, 12), pady=5)
+        self.paper_size = ttk.Combobox(
+            self.body, state="readonly", values=tuple(PAPER_SIZES_MM), width=32
+        )
+        self.paper_size.set("Automático (área máxima)")
+        self.paper_size.grid(row=4, column=1, pady=5)
+
+        ttk.Label(self.body, text="Formato de saída").grid(row=5, column=0, sticky="w", padx=(0, 12), pady=5)
         self.output_format = ttk.Combobox(self.body, state="readonly", values=("PDF", "JPG"), width=32)
         self.output_format.set("PDF")
-        self.output_format.grid(row=4, column=1, pady=5)
+        self.output_format.grid(row=5, column=1, pady=5)
 
         self.ocr = tk.BooleanVar(value=False)
         ocr_text = "Aplicar OCR (PDF pesquisável)" if ocr_available else "Aplicar OCR (Tesseract não encontrado)"
@@ -1955,12 +2031,12 @@ class IPScanDialog(BaseDialog):
             text=ocr_text,
             variable=self.ocr,
             state="normal" if ocr_available else "disabled",
-        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(10, 4))
+        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(10, 4))
 
-        ttk.Label(self.body, text="Idioma OCR").grid(row=6, column=0, sticky="w", padx=(0, 12), pady=5)
+        ttk.Label(self.body, text="Idioma OCR").grid(row=7, column=0, sticky="w", padx=(0, 12), pady=5)
         self.language = ttk.Combobox(self.body, state="readonly", values=tuple(OCR_LANGUAGES), width=32)
         self.language.set("Português + Inglês")
-        self.language.grid(row=6, column=1, pady=5)
+        self.language.grid(row=7, column=1, pady=5)
         self.detection_status = ttk.Label(
             self.body,
             text="Detectando as opções do scanner cadastrado...",
@@ -1968,20 +2044,20 @@ class IPScanDialog(BaseDialog):
             wraplength=560,
             justify="left",
         )
-        self.detection_status.grid(row=7, column=0, columnspan=2, sticky="w", pady=(9, 0))
+        self.detection_status.grid(row=8, column=0, columnspan=2, sticky="w", pady=(9, 0))
         self.remove_blank = tk.BooleanVar(value=False)
         self.auto_deskew = tk.BooleanVar(value=False)
         self.auto_orient = tk.BooleanVar(value=False)
-        ttk.Checkbutton(self.body, text="Remover páginas em branco automaticamente", variable=self.remove_blank).grid(row=8, column=0, columnspan=2, sticky="w", pady=(10, 2))
-        ttk.Checkbutton(self.body, text="Corrigir inclinação automaticamente", variable=self.auto_deskew).grid(row=9, column=0, columnspan=2, sticky="w", pady=2)
-        ttk.Checkbutton(self.body, text="Detectar e corrigir orientação", variable=self.auto_orient).grid(row=10, column=0, columnspan=2, sticky="w", pady=2)
+        ttk.Checkbutton(self.body, text="Remover páginas em branco automaticamente", variable=self.remove_blank).grid(row=9, column=0, columnspan=2, sticky="w", pady=(10, 2))
+        ttk.Checkbutton(self.body, text="Corrigir inclinação automaticamente", variable=self.auto_deskew).grid(row=10, column=0, columnspan=2, sticky="w", pady=2)
+        ttk.Checkbutton(self.body, text="Detectar e corrigir orientação", variable=self.auto_orient).grid(row=11, column=0, columnspan=2, sticky="w", pady=2)
         ttk.Label(
             self.body,
             text="As correções automáticas aumentam o tempo de processamento.",
             foreground="#6b7280",
-        ).grid(row=11, column=0, columnspan=2, sticky="w", pady=(3, 0))
+        ).grid(row=12, column=0, columnspan=2, sticky="w", pady=(3, 0))
         profile_row = ttk.LabelFrame(self.body, text="Perfil de digitalização", padding=8)
-        profile_row.grid(row=12, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+        profile_row.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(10, 0))
         self.profile = ttk.Combobox(profile_row, state="readonly", values=tuple(self.profiles), width=24)
         self.profile.set("Documento padrão")
         self.profile.pack(side="left")
@@ -2035,6 +2111,7 @@ class IPScanDialog(BaseDialog):
             "dpi": self.dpi.get(), "color": self.color.get(),
             "output_format": self.output_format.get(), "use_ocr": bool(self.ocr.get()),
             "language": self.language.get(), "source": self.source.get(),
+            "paper_size": self.paper_size.get(),
             "remove_blank": bool(self.remove_blank.get()), "auto_deskew": bool(self.auto_deskew.get()),
             "auto_orient": bool(self.auto_orient.get()),
         }
@@ -2046,6 +2123,8 @@ class IPScanDialog(BaseDialog):
         self.dpi.set(str(values.get("dpi", "300")))
         self.color.set(str(values.get("color", "Cor")))
         self.output_format.set(str(values.get("output_format", "PDF")))
+        paper_size = str(values.get("paper_size", "Automático (área máxima)"))
+        self.paper_size.set(paper_size if paper_size in PAPER_SIZES_MM else "Automático (área máxima)")
         self.ocr.set(bool(values.get("use_ocr", False)) and self.ocr_available)
         language = str(values.get("language", "Português + Inglês"))
         if language in OCR_LANGUAGES:
@@ -2128,6 +2207,7 @@ class IPScanDialog(BaseDialog):
             int(self.dpi.get()),
             self.color.get(),
             source_code,
+            self.paper_size.get(),
             self.output_format.get(),
             bool(self.ocr.get()) if self.output_format.get() == "PDF" else False,
             OCR_LANGUAGES[self.language.get()],
@@ -2142,16 +2222,7 @@ def _run_administrative_settings() -> None:
     root = tk.Tk()
     root.withdraw()
     root.title(f"{APP_TITLE} - Configurações administrativas")
-    try:
-        png_icon = resource_path("assets/pdf_scanner_multifuncional_v282.png")
-        ico_icon = resource_path("assets/pdf_scanner_multifuncional_v282.ico")
-        if png_icon.is_file():
-            root._window_icon = tk.PhotoImage(file=str(png_icon))  # type: ignore[attr-defined]
-            root.iconphoto(True, root._window_icon)  # type: ignore[attr-defined]
-        if sys.platform == "win32" and ico_icon.is_file():
-            root.iconbitmap(default=str(ico_icon))
-    except tk.TclError:
-        pass
+    _apply_window_icon(root)
     if (
         sys.platform == "win32"
         and not is_process_elevated()
@@ -2175,7 +2246,7 @@ def main() -> None:
         try:
             import ctypes
 
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ALAP.PDFScanner.v282")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ALAP.PDFScanner.v283")
         except (AttributeError, OSError):
             pass
     if "--configuracoes" in sys.argv:

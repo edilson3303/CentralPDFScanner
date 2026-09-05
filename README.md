@@ -1,8 +1,8 @@
 # PDF & Scanner
 
-Versão atual: 2.8.2
+Versão atual: 2.8.3
 
-Esta versão redimensiona automaticamente a pré-visualização de Juntar PDFs, permite selecionar várias páginas com Ctrl e Shift, cadastra vários scanners de rede e restringe as configurações a credenciais administrativas do computador ou do Active Directory.
+Esta versão corrige o ícone da barra de título no Windows, inclui o setor no nome padrão dos arquivos digitalizados, permite escolher o tamanho do papel e testa todos os scanners cadastrados sem expor dados técnicos sensíveis no relatório.
 
 Também oferece progresso detalhado com cancelamento, PDF/A-2b, compactação, separação automática de lotes e pasta/nomenclatura configuráveis.
 
@@ -25,6 +25,8 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 - Salvar a digitalização em PDF ou JPG, com nome automático contendo número de série, data e hora
 - Escolher digitalização normal ou PDF pesquisável com OCR; idiomas aparecem por nome completo
 - Testar scanners WIA, conexão eSCL e OCR e salvar um relatório técnico sem conteúdo dos documentos
+- Escolher Automático, A4, Carta, Ofício, Legal, A3 ou A5 como tamanho do papel
+- Testar todos os scanners de rede cadastrados e ocultar IPs e detalhes internos no relatório
 - Salvar e reutilizar perfis de digitalização com resolução, cor, origem, formato e OCR
 - Pré-visualizar a digitalização, reordenar, girar ou excluir páginas antes de salvar
 - Remover páginas em branco e corrigir inclinação e orientação automaticamente
@@ -65,7 +67,7 @@ Depois de extraído, o pacote abre por `PDFScannerALAP.exe` sem instalar Python 
 
 ## Gerar o instalador do Windows
 
-O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.8.2.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
+O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.8.3.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
 
 ## Cadastrar e usar scanners de rede
 

@@ -19,6 +19,7 @@ from .ocr import images_to_searchable_pdf
 from .pdf_tools import images_to_pdf, save_images_as_jpg
 from .scan_processing import prepare_scanned_images
 from .progress import ProgressCallback, check_cancel, report
+from .scan_options import PAPER_SIZES_MM, paper_size_escl_units
 
 
 class ESCLScannerError(RuntimeError):
@@ -161,7 +162,12 @@ def probe_escl_scanner(ip_address: str, port: int = 80, protocol: str = "http", 
     return "Scanner eSCL/AirScan encontrado"
 
 
-def _scan_settings(dpi: int, color_mode: str, input_source: str = "Platen") -> bytes:
+def _scan_settings(
+    dpi: int,
+    color_mode: str,
+    input_source: str = "Platen",
+    paper_size: str = "Automático (área máxima)",
+) -> bytes:
     if dpi not in (150, 200, 300, 400, 600):
         raise ESCLScannerError("Resolução inválida.")
     colors = {"Cor": "RGB24", "Cinza": "Grayscale8", "Preto e branco": "BlackAndWhite1"}
@@ -170,14 +176,31 @@ def _scan_settings(dpi: int, color_mode: str, input_source: str = "Platen") -> b
         raise ESCLScannerError("Modo de cor inválido.")
     if input_source not in {"Platen", "Feeder", "FeederDuplex"}:
         raise ESCLScannerError("Origem de digitalização inválida.")
+    if paper_size not in PAPER_SIZES_MM:
+        raise ESCLScannerError("Tamanho de papel inválido.")
     source = "Platen" if input_source == "Platen" else "Feeder"
     duplex_setting = ""
     if source == "Feeder":
         duplex = "true" if input_source == "FeederDuplex" else "false"
         duplex_setting = f"\n  <scan:Duplex>{duplex}</scan:Duplex>"
+    region_setting = ""
+    dimensions = paper_size_escl_units(paper_size)
+    if dimensions is not None:
+        width, height = dimensions
+        region_setting = f"""
+  <pwg:ScanRegions>
+    <pwg:ScanRegion>
+      <pwg:ContentRegionUnits>escl:ThreeHundredthsOfInches</pwg:ContentRegionUnits>
+      <pwg:XOffset>0</pwg:XOffset>
+      <pwg:YOffset>0</pwg:YOffset>
+      <pwg:Width>{width}</pwg:Width>
+      <pwg:Height>{height}</pwg:Height>
+    </pwg:ScanRegion>
+  </pwg:ScanRegions>"""
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
-<scan:ScanSettings xmlns:scan="{SCAN_NAMESPACE}" xmlns:pwg="{PWG_NAMESPACE}">
+<scan:ScanSettings xmlns:scan="{SCAN_NAMESPACE}" xmlns:escl="{SCAN_NAMESPACE}" xmlns:pwg="{PWG_NAMESPACE}">
   <pwg:Version>2.0</pwg:Version>
+{region_setting}
   <pwg:InputSource>{source}</pwg:InputSource>{duplex_setting}
   <scan:ColorMode>{color}</scan:ColorMode>
   <scan:XResolution>{dpi}</scan:XResolution>
@@ -212,11 +235,12 @@ def _create_scan_job(
     dpi: int,
     color_mode: str,
     input_source: str,
+    paper_size: str,
     timeout: int,
 ) -> tuple[urllib.request.OpenerDirector, str]:
     request = urllib.request.Request(
         base + SCAN_JOBS_PATH,
-        data=_scan_settings(dpi, color_mode, input_source),
+        data=_scan_settings(dpi, color_mode, input_source, paper_size),
         headers={"Content-Type": "application/xml", "Accept": "application/xml"},
         method="POST",
     )
@@ -347,6 +371,7 @@ def scan_escl_to_pdf(
     dpi: int = 300,
     color_mode: str = "Cor",
     input_source: str = "Platen",
+    paper_size: str = "Automático (área máxima)",
     use_ocr: bool = False,
     language: str = "por+eng",
     app_dir: str | Path | None = None,
@@ -369,7 +394,9 @@ def scan_escl_to_pdf(
         images: list[Path] = []
         scanned_pages = 0
         if input_source in {"Feeder", "FeederDuplex"}:
-            opener, job_url = _create_scan_job(base, protocol, dpi, color_mode, input_source, timeout=180)
+            opener, job_url = _create_scan_job(
+                base, protocol, dpi, color_mode, input_source, paper_size, timeout=180
+            )
             try:
                 while scanned_pages < MAX_SCAN_PAGES:
                     check_cancel(cancel_event)
@@ -387,7 +414,9 @@ def scan_escl_to_pdf(
             while True:
                 check_cancel(cancel_event)
                 report(progress_callback, f"Digitalizando página {scanned_pages + 1}...")
-                opener, job_url = _create_scan_job(base, protocol, dpi, color_mode, input_source, timeout=180)
+                opener, job_url = _create_scan_job(
+                    base, protocol, dpi, color_mode, input_source, paper_size, timeout=180
+                )
                 try:
                     document = _next_document(opener, job_url, timeout=180)
                     if document is None:

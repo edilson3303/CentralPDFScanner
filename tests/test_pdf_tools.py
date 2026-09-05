@@ -4,6 +4,7 @@ import json
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
@@ -39,6 +40,7 @@ from central_pdf_scanner.escl_scanner import (
     detect_escl_details,
     probe_escl_scanner,
     scan_escl_to_pdf,
+    _scan_settings,
     validate_ip_settings,
 )
 from central_pdf_scanner.scanner import ScannerDevice, _serial_from_wia_properties, _sources_from_wia_capabilities
@@ -53,6 +55,7 @@ from central_pdf_scanner.app import DEFAULT_SCAN_PROFILES, default_scan_basename
 from central_pdf_scanner.security import is_administrative_sid
 from central_pdf_scanner.thumbnail_dialogs import merge_window_size, selection_after_click
 from central_pdf_scanner.word_tools import word_to_pdf
+from central_pdf_scanner.scan_options import paper_size_escl_units, paper_size_pixels
 from docx import Document
 
 
@@ -251,10 +254,33 @@ class PDFToolsTests(unittest.TestCase):
         self.assertEqual(image.read_bytes(), original)
 
     def test_scanner_diagnostic_does_not_require_a_scanner(self) -> None:
-        report = build_scanner_diagnostic("2.8.2", self.root)
-        self.assertIn("Versão do software: 2.8.2", report)
+        report = build_scanner_diagnostic("2.8.3", self.root)
+        self.assertIn("Versão do software: 2.8.3", report)
         self.assertIn("SCANNERS INSTALADOS NO WINDOWS", report)
         self.assertIn("não contém imagens nem conteúdo", report)
+        self.assertNotIn("Windows/Sistema:", report)
+        self.assertNotIn("Arquitetura:", report)
+        self.assertNotIn("Python interno:", report)
+        self.assertNotIn("OCR Tesseract:", report)
+
+    def test_scanner_diagnostic_tests_all_registered_network_scanners(self) -> None:
+        scanners = [
+            {"nome": "Protocolo", "ip": "192.168.1.20"},
+            {"nome": "Arquivo", "ip": "192.168.1.21"},
+        ]
+        with patch(
+            "central_pdf_scanner.diagnostics.detect_escl_details",
+            side_effect=[
+                ("Lexmark 1", "SERIE1", ("Platen",)),
+                ("Lexmark 2", "SERIE2", ("Platen", "Feeder")),
+            ],
+        ) as detector:
+            report = build_scanner_diagnostic("2.8.3", self.root, scanners)
+        self.assertEqual(detector.call_count, 2)
+        self.assertIn("1. Protocolo", report)
+        self.assertIn("2. Arquivo", report)
+        self.assertNotIn("192.168.1.20", report)
+        self.assertNotIn("192.168.1.21", report)
 
     def test_compact_pdf_reports_before_and_after(self) -> None:
         image_path = self.root / "grande.jpg"
@@ -297,6 +323,18 @@ class PDFToolsTests(unittest.TestCase):
             "ABC 123", {"modelo_nome": "Scan_{serie}_{data}_{hora}_{setor}", "setor": "Protocolo"}
         )
         self.assertRegex(name, r"^Scan_ABC_123_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_Protocolo$")
+
+    def test_default_scan_filename_includes_sector(self) -> None:
+        name = default_scan_basename("ABC 123", {"setor": "Arquivo"})
+        self.assertRegex(name, r"^Scan_ABC_123_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_Arquivo$")
+
+    def test_paper_size_conversions_and_escl_request(self) -> None:
+        self.assertEqual(paper_size_pixels("A4 (210 × 297 mm)", 300), (2480, 3508))
+        self.assertEqual(paper_size_escl_units("Carta (216 × 279 mm)"), (2550, 3300))
+        settings = _scan_settings(300, "Cor", "Platen", "A4 (210 × 297 mm)")
+        self.assertIn(b"<pwg:Width>2480</pwg:Width>", settings)
+        self.assertIn(b"<pwg:Height>3508</pwg:Height>", settings)
+        self.assertIn(b"ThreeHundredthsOfInches", settings)
 
     @unittest.skipUnless(_find_libreoffice(), "LibreOffice não instalado")
     def test_pdfa_conversion_identifies_pdfa_2b(self) -> None:
