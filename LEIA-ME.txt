@@ -1,4 +1,4 @@
-PDF & SCANNER 2.9.1
+PDF & SCANNER 2.9.2
 =================
 
 COMO ABRIR A VERSÃO PORTÁTIL
@@ -19,12 +19,14 @@ CONFIGURAÇÕES ADMINISTRATIVAS
 - A pasta padrão, o salvamento automático, o setor e o modelo do nome também
   ficam na configuração administrativa comum do computador.
 - As configurações podem ser exportadas e importadas em arquivo JSON validado.
-- Dentro do botão "Configurações", o histórico local pode ser consultado e
-  exportado sem exigir acesso às configurações administrativas.
+- Dentro do botão "Configurações", o histórico local somente pode ser consultado
+  e exportado após autorização de administrador local ou do Active Directory.
 
 PRIVACIDADE E CONTROLE
 - "Tarjar Informações" permite desenhar tarjas que removem definitivamente o
   conteúdo selecionado do novo PDF.
+- A janela de tarja pode ser maximizada e possui Zoom −, Zoom +, Ajustar,
+  barras de rolagem e Ctrl+roda do mouse.
 - O histórico mostra as operações locais e permite exportar CSV; não registra
   nomes nem conteúdo dos documentos.
 

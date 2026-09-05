@@ -147,8 +147,18 @@ def mock_screen(title: str, kind: str) -> BytesIO:
         button((1255, 735, 1370, 790), "Cancelar")
     elif kind == "redaction":
         draw.text((35, 82), "Arraste o mouse sobre cada informação que deve ser removida definitivamente.", font=font(19, True), fill=TEXT)
-        for idx, label in enumerate(("Página anterior", "Próxima página", "Desfazer última tarja", "Limpar página")):
-            button((35 + idx * 260, 125, 270 + idx * 260, 175), label)
+        controls = [
+            ((35, 125, 225, 175), "Página anterior"),
+            ((235, 125, 435, 175), "Próxima página"),
+            ((445, 125, 690, 175), "Desfazer última tarja"),
+            ((700, 125, 875, 175), "Limpar página"),
+            ((885, 125, 990, 175), "Zoom −"),
+            ((1000, 125, 1105, 175), "Zoom +"),
+            ((1115, 125, 1215, 175), "Ajustar"),
+            ((1225, 125, 1365, 175), "Maximizar"),
+        ]
+        for bounds, label in controls:
+            button(bounds, label)
         draw.rectangle((35, 200, 260, 735), fill="white", outline="#9aa9ba", width=2)
         for idx in range(8):
             draw.text((60, 225 + idx * 55), f"Página {idx + 1}", font=font(17), fill=TEXT)
@@ -162,7 +172,7 @@ def mock_screen(title: str, kind: str) -> BytesIO:
         draw.text((70, 105), "Escolha a área que deseja abrir.", font=font(24, True), fill=NAVY)
         button((250, 220, 1150, 315), "Histórico de operações", True)
         button((250, 350, 1150, 445), "Configurações administrativas")
-        draw.text((250, 500), "As configurações administrativas exigem autorização do Windows.", font=font(19), fill=TEXT)
+        draw.text((250, 500), "O histórico e as configurações exigem autorização do Windows.", font=font(19), fill=TEXT)
         button((1160, 730, 1335, 790), "Fechar")
     elif kind == "history":
         draw.text((35, 85), "Histórico local de operações", font=font(23, True), fill=NAVY)
@@ -181,7 +191,7 @@ def mock_screen(title: str, kind: str) -> BytesIO:
             draw.text((635, y), values[2], font=font(16), fill=TEXT)
             draw.text((785, y), "usuário", font=font(16), fill=TEXT)
             draw.text((955, y), "PC-ALAP", font=font(16), fill=TEXT)
-            draw.text((1175, y), "2.9.1", font=font(16), fill=TEXT)
+            draw.text((1175, y), "2.9.2", font=font(16), fill=TEXT)
             draw.line((35, y + 35, 1365, y + 35), fill="#d6dee8")
         button((1040, 740, 1215, 795), "Exportar CSV", True)
         button((1230, 740, 1365, 795), "Fechar")
@@ -238,7 +248,7 @@ def build_manual() -> None:
         Paragraph("MANUAL DO USUÁRIO", styles["ManualTitle"]),
         Paragraph("PDF & Scanner - Assembleia Legislativa do Estado do Amapá - ALAP", styles["ManualTitle"]),
         Spacer(1, 1.5 * cm),
-        Paragraph("Versão 2.9.1 | Processamento local de documentos", ParagraphStyle(name="Cover", parent=body, alignment=TA_CENTER, fontSize=13)),
+        Paragraph("Versão 2.9.2 | Processamento local de documentos", ParagraphStyle(name="Cover", parent=body, alignment=TA_CENTER, fontSize=13)),
         PageBreak(),
     ])
 
@@ -255,8 +265,8 @@ def build_manual() -> None:
     chapter("11. Conversões", "A seção Conversões possui quatro botões por linha e mantém os documentos no computador.", "Conversões", "home", ["PDF para Word: escolha o PDF e salve um DOCX editável.", "Word para PDF: escolha DOC ou DOCX; o programa usa Word ou LibreOffice.", "PDF para JPG: escolha resolução e pasta de destino.", "JPG para PDF: selecione as imagens na ordem desejada.", "PDF Digitalizado para OCR: cria um PDF pesquisável.", "PDF/A (arquivamento): gera PDF/A-2b com o LibreOffice instalado."], "Conversões complexas podem variar conforme fontes e elementos do arquivo original.")
     chapter("12. OCR", "O OCR reconhece texto em documentos digitalizados e cria uma camada pesquisável.", "Opções de OCR", "scan", ["Marque Aplicar OCR durante a digitalização ou use PDF Digitalizado para OCR.", "Escolha o idioma pelo nome completo.", "Acompanhe a indicação Aplicando OCR e o número da página.", "Use Cancelar operação se necessário.", "Pesquise ou selecione o texto no PDF resultante."], "OCR, orientação automática e resoluções altas aumentam o tempo de processamento.")
     chapter("13. Diagnóstico e solução de problemas", "O botão Testar scanner verifica todos os scanners cadastrados e gera um relatório sem copiar o conteúdo dos documentos.", "Diagnóstico", "generic", ["Clique em Testar scanner.", "Confira todos os scanners WIA, todos os scanners de rede cadastrados e o OCR.", "O relatório oculta os IPs, a versão do Windows, a arquitetura, o Python interno e o caminho do OCR.", "Copie ou salve o relatório para atendimento técnico.", "Em erro de alimentador, retire folhas presas, alinhe o papel e aguarde o equipamento ficar livre."], "Nunca desative controles de segurança do Windows para contornar um erro.")
-    chapter("14. Tarjar Informações", "A tarja permanente remove o texto e a imagem da área marcada; não é apenas um retângulo desenhado sobre o conteúdo.", "Tarja para ocultar informações", "redaction", ["Clique em Tarjar Informações e escolha o PDF.", "Selecione uma página na lista lateral.", "Arraste o mouse sobre cada dado que deve ser removido.", "Use Desfazer última tarja ou Limpar página para corrigir a marcação.", "Clique em Aplicar tarjas, confirme e salve como um novo PDF."], "Abra e pesquise o resultado antes de distribuir. A remoção no novo arquivo é definitiva.")
-    chapter("15. Histórico dentro de Configurações", "O histórico ajuda no acompanhamento local e registra somente metadados operacionais.", "Menu Configurações", "settings_menu", ["Clique em Configurações na tela principal.", "Escolha Histórico de operações; essa consulta não exige acesso administrativo.", "Consulte data, operação, resultado, usuário, computador e versão.", "Clique em Exportar CSV para produzir um relatório.", "Feche a janela para voltar à tela principal."], "O histórico não guarda nomes, caminhos, conteúdo dos documentos ou senhas.")
+    chapter("14. Tarjar Informações", "A tarja permanente remove o texto e a imagem da área marcada; não é apenas um retângulo desenhado sobre o conteúdo.", "Tarjar Informações", "redaction", ["Clique em Tarjar Informações e escolha o PDF.", "Selecione uma página na lista lateral.", "Use Zoom −, Zoom +, Ctrl+roda do mouse ou Ajustar; use Maximizar para ocupar a tela.", "Arraste o mouse sobre cada dado e use as barras para percorrer a página ampliada.", "Clique em Aplicar tarjas, confirme e salve como um novo PDF."], "Use Desfazer última tarja ou Limpar página para corrigir a marcação. A remoção no novo arquivo é definitiva.")
+    chapter("15. Histórico dentro de Configurações", "O histórico ajuda no acompanhamento local e registra somente metadados operacionais.", "Menu Configurações", "settings_menu", ["Clique em Configurações na tela principal.", "Escolha Histórico de operações.", "Autorize o UAC com um administrador local ou do Active Directory.", "Consulte data, operação, resultado, usuário, computador e versão.", "Clique em Exportar CSV para produzir um relatório."], "Somente administradores podem visualizar o histórico. Ele não guarda nomes, caminhos, conteúdo dos documentos ou senhas.")
     chapter("16. Privacidade, licença e atalhos", "O instalador cria atalhos para todos os usuários e mantém os termos institucionais acessíveis.", "Uso institucional", "generic", ["Os atalhos são criados no Menu Iniciar comum e, quando escolhido, na Área de Trabalho pública.", "Clique em Licença para consultar e copiar os termos.", "Os documentos permanecem no computador.", "Proteja documentos sigilosos conforme as normas da ALAP.", "Mantenha o software atualizado e valide novas versões antes da implantação ampla."])
 
     def decorate(canvas, document):

@@ -53,7 +53,7 @@ class PrivacyAndControlTests(unittest.TestCase):
         with patch("central_pdf_scanner.activity_history.getpass.getuser", return_value="usuario"), patch(
             "central_pdf_scanner.activity_history.platform.node", return_value="PC-ALAP"
         ):
-            record_operation(self.root, "Compactando PDF", "Concluída", "2.9.1")
+            record_operation(self.root, "Compactando PDF", "Concluída", "2.9.2")
         records = load_history(self.root)
         self.assertEqual(records[0]["operacao"], "Compactando PDF")
         self.assertEqual(records[0]["computador"], "PC-ALAP")

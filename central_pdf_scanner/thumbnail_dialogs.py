@@ -39,6 +39,11 @@ def merge_window_size(page_count: int, screen_width: int, screen_height: int) ->
     )
 
 
+def adjusted_zoom(current: float, factor: float) -> float:
+    """Limita a ampliação da página entre 50% e 400%."""
+    return min(4.0, max(0.5, current * factor))
+
+
 class ThumbnailDialog(tk.Toplevel):
     """Janela visual centralizada para escolher páginas de PDF."""
 
@@ -396,7 +401,7 @@ class RedactionDialog(ThumbnailDialog):
     """Permite desenhar tarjas removidas definitivamente do PDF."""
 
     def __init__(self, parent: tk.Misc, source: str | Path) -> None:
-        super().__init__(parent, "Tarja para ocultar informações")
+        super().__init__(parent, "Tarjar Informações")
         self.source = Path(source)
         self.document = fitz.open(self.source)
         if self.document.needs_pass:
@@ -409,6 +414,8 @@ class RedactionDialog(ThumbnailDialog):
         self.redactions: dict[int, list[fitz.Rect]] = {}
         self.photo: ImageTk.PhotoImage | None = None
         self.scale = 1.0
+        self.zoom_level = 1.0
+        self._center_after_render = True
         self.offset_x = 0.0
         self.offset_y = 0.0
         self.drag_start: tuple[float, float] | None = None
@@ -432,6 +439,13 @@ class RedactionDialog(ThumbnailDialog):
         ttk.Button(tools, text="Próxima página", command=lambda: self.change_page(1)).pack(side="left", padx=6)
         ttk.Button(tools, text="Desfazer última tarja", command=self.undo).pack(side="left", padx=(16, 6))
         ttk.Button(tools, text="Limpar página", command=self.clear_page).pack(side="left")
+        ttk.Button(tools, text="Zoom −", command=lambda: self.change_zoom(0.8)).pack(side="left", padx=(16, 4))
+        self.zoom_text = ttk.Label(tools, text="100%", width=6, anchor="center")
+        self.zoom_text.pack(side="left")
+        ttk.Button(tools, text="Zoom +", command=lambda: self.change_zoom(1.25)).pack(side="left", padx=4)
+        ttk.Button(tools, text="Ajustar", command=self.fit_page).pack(side="left", padx=(0, 6))
+        self.maximize_button = ttk.Button(tools, text="Maximizar", command=self.toggle_maximize)
+        self.maximize_button.pack(side="left")
 
         content = ttk.Frame(self)
         content.pack(fill="both", expand=True, padx=16)
@@ -447,12 +461,22 @@ class RedactionDialog(ThumbnailDialog):
         self.pages.selection_set(0)
         self.pages.bind("<<ListboxSelect>>", self._page_selected)
 
-        self.canvas = tk.Canvas(content, bg="#27364a", highlightthickness=0, cursor="crosshair")
-        self.canvas.pack(side="left", fill="both", expand=True)
+        canvas_frame = ttk.Frame(content)
+        canvas_frame.pack(side="left", fill="both", expand=True)
+        self.canvas = tk.Canvas(canvas_frame, bg="#27364a", highlightthickness=0, cursor="crosshair")
+        horizontal = ttk.Scrollbar(canvas_frame, orient="horizontal", command=self.canvas.xview)
+        vertical = ttk.Scrollbar(canvas_frame, orient="vertical", command=self.canvas.yview)
+        self.canvas.configure(xscrollcommand=horizontal.set, yscrollcommand=vertical.set)
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        vertical.grid(row=0, column=1, sticky="ns")
+        horizontal.grid(row=1, column=0, sticky="ew")
+        canvas_frame.rowconfigure(0, weight=1)
+        canvas_frame.columnconfigure(0, weight=1)
         self.canvas.bind("<Configure>", self._schedule_render)
         self.canvas.bind("<ButtonPress-1>", self._drag_begin)
         self.canvas.bind("<B1-Motion>", self._drag_move)
         self.canvas.bind("<ButtonRelease-1>", self._drag_end)
+        self.canvas.bind("<Control-MouseWheel>", self._zoom_wheel)
 
         footer = ttk.Frame(self, padding=16)
         footer.pack(fill="x")
@@ -475,12 +499,17 @@ class RedactionDialog(ThumbnailDialog):
         page = self.document[self.page_index]
         available_width = max(200, self.canvas.winfo_width() - 24)
         available_height = max(200, self.canvas.winfo_height() - 24)
-        self.scale = min(available_width / page.rect.width, available_height / page.rect.height)
+        fit_scale = min(available_width / page.rect.width, available_height / page.rect.height)
+        self.scale = fit_scale * self.zoom_level
         pixmap = page.get_pixmap(matrix=fitz.Matrix(self.scale, self.scale), alpha=False)
         image = Image.open(BytesIO(pixmap.tobytes("png")))
         self.photo = ImageTk.PhotoImage(image)
-        self.offset_x = (self.canvas.winfo_width() - image.width) / 2
-        self.offset_y = (self.canvas.winfo_height() - image.height) / 2
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        self.offset_x = max(12.0, (canvas_width - image.width) / 2)
+        self.offset_y = max(12.0, (canvas_height - image.height) / 2)
+        scroll_width = max(canvas_width, self.offset_x + image.width + 12)
+        scroll_height = max(canvas_height, self.offset_y + image.height + 12)
         self.canvas.delete("all")
         self.canvas.create_image(self.offset_x, self.offset_y, image=self.photo, anchor="nw")
         for rectangle in self.redactions.get(self.page_index, []):
@@ -491,13 +520,54 @@ class RedactionDialog(ThumbnailDialog):
                 self.offset_y + rectangle.y1 * self.scale,
                 fill="black", outline="#dc2626", width=2, stipple="gray50",
             )
+        self.canvas.configure(scrollregion=(0, 0, scroll_width, scroll_height))
+        if self._center_after_render:
+            if scroll_width > canvas_width:
+                self.canvas.xview_moveto(((scroll_width - canvas_width) / 2) / scroll_width)
+            else:
+                self.canvas.xview_moveto(0)
+            if scroll_height > canvas_height:
+                self.canvas.yview_moveto(((scroll_height - canvas_height) / 2) / scroll_height)
+            else:
+                self.canvas.yview_moveto(0)
+            self._center_after_render = False
         count = sum(len(items) for items in self.redactions.values())
         self.summary.configure(text=f"Página {self.page_index + 1} de {len(self.document)} - {count} tarja(s)")
+
+    def change_zoom(self, factor: float) -> None:
+        self.zoom_level = adjusted_zoom(self.zoom_level, factor)
+        self.zoom_text.configure(text=f"{round(self.zoom_level * 100):d}%")
+        self._center_after_render = True
+        self.render_current_page()
+
+    def fit_page(self) -> None:
+        self.zoom_level = 1.0
+        self.zoom_text.configure(text="100%")
+        self._center_after_render = True
+        self.render_current_page()
+
+    def _zoom_wheel(self, event: tk.Event) -> str:
+        self.change_zoom(1.25 if event.delta > 0 else 0.8)
+        return "break"
+
+    def toggle_maximize(self) -> None:
+        try:
+            maximized = self.state() == "zoomed"
+            self.state("normal" if maximized else "zoomed")
+            self.maximize_button.configure(text="Maximizar" if maximized else "Restaurar")
+        except tk.TclError:
+            # Alguns gerenciadores de janela usam o atributo em vez do estado.
+            maximized = bool(self.attributes("-zoomed"))
+            self.attributes("-zoomed", not maximized)
+            self.maximize_button.configure(text="Maximizar" if maximized else "Restaurar")
+        self._center_after_render = True
+        self.after_idle(self.render_current_page)
 
     def _page_selected(self, _event=None) -> None:
         selection = self.pages.curselection()
         if selection:
             self.page_index = int(selection[0])
+            self._center_after_render = True
             self.render_current_page()
 
     def change_page(self, change: int) -> None:
@@ -506,7 +576,11 @@ class RedactionDialog(ThumbnailDialog):
         self.pages.selection_set(target)
         self.pages.see(target)
         self.page_index = target
+        self._center_after_render = True
         self.render_current_page()
+
+    def _canvas_point(self, event: tk.Event) -> tuple[float, float]:
+        return self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
 
     def _inside_page(self, x: float, y: float) -> bool:
         page = self.document[self.page_index]
@@ -516,25 +590,28 @@ class RedactionDialog(ThumbnailDialog):
         )
 
     def _drag_begin(self, event: tk.Event) -> None:
-        if not self._inside_page(event.x, event.y):
+        x, y = self._canvas_point(event)
+        if not self._inside_page(x, y):
             return
-        self.drag_start = (event.x, event.y)
+        self.drag_start = (x, y)
         self.drag_item = self.canvas.create_rectangle(
-            event.x, event.y, event.x, event.y,
+            x, y, x, y,
             fill="black", outline="#dc2626", width=2, stipple="gray50",
         )
 
     def _drag_move(self, event: tk.Event) -> None:
         if self.drag_start is not None and self.drag_item is not None:
-            self.canvas.coords(self.drag_item, *self.drag_start, event.x, event.y)
+            x, y = self._canvas_point(event)
+            self.canvas.coords(self.drag_item, *self.drag_start, x, y)
 
     def _drag_end(self, event: tk.Event) -> None:
         if self.drag_start is None:
             return
         x0, y0 = self.drag_start
+        event_x, event_y = self._canvas_point(event)
         page = self.document[self.page_index]
-        x1 = min(max(event.x, self.offset_x), self.offset_x + page.rect.width * self.scale)
-        y1 = min(max(event.y, self.offset_y), self.offset_y + page.rect.height * self.scale)
+        x1 = min(max(event_x, self.offset_x), self.offset_x + page.rect.width * self.scale)
+        y1 = min(max(event_y, self.offset_y), self.offset_y + page.rect.height * self.scale)
         self.drag_start = None
         self.drag_item = None
         left, right = sorted(((x0 - self.offset_x) / self.scale, (x1 - self.offset_x) / self.scale))

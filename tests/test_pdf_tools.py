@@ -52,8 +52,12 @@ from central_pdf_scanner.advanced_pdf import _find_libreoffice, compact_pdf, con
 from central_pdf_scanner.progress import OperationCancelled
 from central_pdf_scanner import app as application
 from central_pdf_scanner.app import DEFAULT_SCAN_PROFILES, default_scan_basename
-from central_pdf_scanner.security import is_administrative_sid
-from central_pdf_scanner.thumbnail_dialogs import merge_window_size, selection_after_click
+from central_pdf_scanner.security import (
+    is_administrative_sid,
+    launch_elevated_history,
+    launch_elevated_settings,
+)
+from central_pdf_scanner.thumbnail_dialogs import adjusted_zoom, merge_window_size, selection_after_click
 from central_pdf_scanner.word_tools import word_to_pdf
 from central_pdf_scanner.scan_options import paper_size_escl_units, paper_size_pixels
 from docx import Document
@@ -165,6 +169,11 @@ class PDFToolsTests(unittest.TestCase):
         self.assertEqual(merge_window_size(1, 1920, 1080), (900, 520))
         self.assertEqual(merge_window_size(20, 1920, 1080), (955, 850))
         self.assertEqual(merge_window_size(20, 800, 600), (750, 530))
+
+    def test_redaction_zoom_is_limited(self) -> None:
+        self.assertEqual(adjusted_zoom(1.0, 1.25), 1.25)
+        self.assertEqual(adjusted_zoom(4.0, 1.25), 4.0)
+        self.assertEqual(adjusted_zoom(0.5, 0.8), 0.5)
 
     def test_parse_split_intervals(self) -> None:
         self.assertEqual(parse_split_intervals("1-2,3,4-5", 5), [[0, 1], [2], [3, 4]])
@@ -408,6 +417,14 @@ class PDFToolsTests(unittest.TestCase):
         self.assertTrue(is_administrative_sid("S-1-5-21-100-200-300-512"))
         self.assertTrue(is_administrative_sid("S-1-5-21-100-200-300-519"))
         self.assertFalse(is_administrative_sid("S-1-5-21-100-200-300-513"))
+
+    def test_administrative_windows_use_separate_uac_routes(self) -> None:
+        with patch("central_pdf_scanner.security.launch_elevated_mode", return_value=True) as launch:
+            self.assertTrue(launch_elevated_history())
+            launch.assert_called_once_with("--historico")
+        with patch("central_pdf_scanner.security.launch_elevated_mode", return_value=True) as launch:
+            self.assertTrue(launch_elevated_settings())
+            launch.assert_called_once_with("--configuracoes")
 
     def test_default_scan_mode_is_color(self) -> None:
         self.assertEqual(DEFAULT_SCAN_PROFILES["Documento padrão"]["color"], "Cor")

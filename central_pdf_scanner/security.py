@@ -53,16 +53,18 @@ def is_process_elevated() -> bool:
         return False
 
 
-def launch_elevated_settings() -> bool:
-    """Abre somente as configurações em um processo elevado pelo UAC."""
+def launch_elevated_mode(mode: str) -> bool:
+    """Abre uma área administrativa em um processo elevado pelo UAC."""
     if sys.platform != "win32":
+        return False
+    if mode not in {"--configuracoes", "--historico"}:
         return False
     executable = str(Path(sys.executable).resolve())
     if getattr(sys, "frozen", False):
-        parameters = "--configuracoes"
+        parameters = mode
     else:
         script = str(Path(sys.argv[0]).resolve())
-        parameters = f'"{script}" --configuracoes'
+        parameters = f'"{script}" {mode}'
     try:
         result = ctypes.windll.shell32.ShellExecuteW(
             None, "runas", executable, parameters, os.getcwd(), 1
@@ -70,3 +72,13 @@ def launch_elevated_settings() -> bool:
         return int(result) > 32
     except (AttributeError, OSError, ValueError):
         return False
+
+
+def launch_elevated_settings() -> bool:
+    """Abre somente as configurações em um processo elevado pelo UAC."""
+    return launch_elevated_mode("--configuracoes")
+
+
+def launch_elevated_history() -> bool:
+    """Abre somente o histórico em um processo elevado pelo UAC."""
+    return launch_elevated_mode("--historico")

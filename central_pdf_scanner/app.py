@@ -42,7 +42,12 @@ from .scanner import filter_direct_scanners, list_scanners, scan_to_pdf
 from .scan_options import PAPER_SIZES_MM
 from .progress import OperationCancelled
 from .privacy_tools import redact_pdf
-from .security import is_process_elevated, is_windows_administrator, launch_elevated_settings
+from .security import (
+    is_process_elevated,
+    is_windows_administrator,
+    launch_elevated_history,
+    launch_elevated_settings,
+)
 from .word_tools import pdf_to_word, word_to_pdf
 from .thumbnail_dialogs import MergePagesDialog, PageSelectionDialog, RedactionDialog, ScanPreviewDialog
 
@@ -847,7 +852,7 @@ class CentralApp(tk.Tk):
         dialog = SettingsMenuDialog(self)
         self.wait_window(dialog)
         if dialog.result == "historico":
-            self.show_history()
+            self._open_administrative_history()
         elif dialog.result == "administrativas":
             self._open_administrative_settings()
 
@@ -862,6 +867,17 @@ class CentralApp(tk.Tk):
             return
         dialog = OutputSettingsDialog(self, _load_output_settings(), _load_network_scanners())
         self.wait_window(dialog)
+
+    def _open_administrative_history(self) -> None:
+        if sys.platform == "win32" and not is_process_elevated():
+            if not launch_elevated_history():
+                messagebox.showerror(
+                    APP_TITLE,
+                    "O histórico exige as credenciais de um administrador local ou do Active Directory.",
+                    parent=self,
+                )
+            return
+        self.show_history()
 
     def show_license(self) -> None:
         LicenseDialog(self)
@@ -1359,7 +1375,7 @@ class SettingsMenuDialog(BaseDialog):
         ).grid(row=2, column=0, sticky="ew", pady=4)
         ttk.Label(
             self.body,
-            text="As configurações administrativas exigem autorização do Windows.",
+            text="O histórico e as configurações administrativas exigem autorização do Windows.",
             foreground="#476582",
         ).grid(row=3, column=0, sticky="w", pady=(10, 0))
         ttk.Button(self.body, text="Fechar", command=self.destroy).grid(
@@ -2512,16 +2528,41 @@ def _run_administrative_settings() -> None:
     root.destroy()
 
 
+def _run_administrative_history() -> None:
+    root = tk.Tk()
+    root.withdraw()
+    root.title(f"{APP_TITLE} - Histórico de operações")
+    _apply_window_icon(root)
+    if (
+        sys.platform == "win32"
+        and not is_process_elevated()
+        and not is_windows_administrator()
+    ):
+        messagebox.showerror(
+            APP_TITLE,
+            "O histórico somente pode ser visualizado por um administrador local "
+            "ou do Active Directory.",
+            parent=root,
+        )
+        root.destroy()
+        return
+    dialog = HistoryDialog(root, load_history(settings_directory()))
+    root.wait_window(dialog)
+    root.destroy()
+
+
 def main() -> None:
     if sys.platform == "win32":
         try:
             import ctypes
 
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ALAP.PDFScanner.v291")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ALAP.PDFScanner.v292")
         except (AttributeError, OSError):
             pass
     if "--configuracoes" in sys.argv:
         _run_administrative_settings()
+    elif "--historico" in sys.argv:
+        _run_administrative_history()
     else:
         app = CentralApp()
         app.mainloop()

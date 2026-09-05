@@ -1,8 +1,8 @@
 # PDF & Scanner
 
-Versão atual: 2.9.1
+Versão atual: 2.9.2
 
-Esta versão mantém a tarja permanente e o histórico local, move o acesso ao histórico para Configurações, remove o inventário institucional e a detecção de duplicados e separa os scanners USB dos scanners de rede cadastrados.
+Esta versão acrescenta zoom, rolagem e maximização à ferramenta Tarjar Informações e restringe o Histórico de operações a administradores locais ou do Active Directory.
 
 Também oferece progresso detalhado com cancelamento, PDF/A-2b, compactação, separação automática de lotes e pasta/nomenclatura configuráveis.
 
@@ -36,8 +36,8 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 - Separar lotes por página em branco, quantidade de páginas ou código de barras/QR Code
 - Configurar, com credenciais administrativas, scanners de rede, pasta padrão, salvamento automático, setor e modelo de nome
 - Exportar e importar, em JSON validado, os scanners e as configurações administrativas
-- Consultar, dentro de Configurações, o histórico local de operações e exportá-lo em CSV
-- Tarjar informações permanentemente, removendo o conteúdo marcado do novo PDF
+- Consultar, dentro de Configurações e mediante autorização administrativa, o histórico local de operações e exportá-lo em CSV
+- Tarjar informações permanentemente, com zoom, rolagem e maximização da janela
 - Trabalhar visualmente com miniaturas ao remover, juntar, dividir, girar ou cortar páginas
 - Cortar margens superior e inferior em centímetros
 - Converter PDF para Word editável de alta fidelidade, sem exigir o Microsoft Word
@@ -70,7 +70,7 @@ Depois de extraído, o pacote abre por `PDFScannerALAP.exe` sem instalar Python 
 
 ## Gerar o instalador do Windows
 
-O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.9.1.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
+O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.9.2.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
 
 ## Cadastrar e usar scanners de rede
 
