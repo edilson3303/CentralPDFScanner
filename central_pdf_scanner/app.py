@@ -38,12 +38,11 @@ from .pdf_tools import (
     trim_vertical_pdf,
     unprotect_pdf,
 )
-from .scanner import list_scanners, scan_to_pdf
+from .scanner import filter_direct_scanners, list_scanners, scan_to_pdf
 from .scan_options import PAPER_SIZES_MM
 from .progress import OperationCancelled
-from .privacy_tools import find_duplicate_pdfs, redact_pdf
+from .privacy_tools import redact_pdf
 from .security import is_process_elevated, is_windows_administrator, launch_elevated_settings
-from .install_inventory import list_installations, register_installation
 from .word_tools import pdf_to_word, word_to_pdf
 from .thumbnail_dialogs import MergePagesDialog, PageSelectionDialog, RedactionDialog, ScanPreviewDialog
 
@@ -128,21 +127,15 @@ def _load_output_settings() -> dict:
     return result
 
 
-def _load_inventory_folder() -> str:
-    return str(_read_machine_settings().get("pasta_inventario_instalacoes", "")).strip()
-
-
 def _configuration_payload(
     output_settings: dict,
     scanners: list[dict[str, str]],
-    inventory_folder: str,
 ) -> dict:
     return {
         "formato": "PDFScannerALAP-config",
         "versao_schema": 1,
         "scanners_rede": scanners,
         "saida_digitalizacao": output_settings,
-        "pasta_inventario_instalacoes": inventory_folder,
     }
 
 
@@ -189,10 +182,7 @@ def _validate_configuration_payload(payload: object) -> dict:
     except (KeyError, ValueError) as exc:
         raise ValueError("O modelo de nome do arquivo é inválido.") from exc
     output["modelo_nome"] = template
-    inventory_folder = str(payload.get("pasta_inventario_instalacoes", "")).strip()
-    if len(inventory_folder) > 1024:
-        raise ValueError("A pasta de inventário informada é inválida.")
-    return _configuration_payload(output, scanners, inventory_folder)
+    return _configuration_payload(output, scanners)
 
 
 def default_scan_basename(serial_number: str, settings: dict | None = None) -> str:
@@ -416,7 +406,6 @@ class CentralApp(tk.Tk):
         # ícone depois desse momento para impedir o ícone genérico do Tk.
         self.after_idle(self._configure_window_icon)
         self.after(250, self._configure_window_icon)
-        self.after(800, self._register_installation_async)
         self.after(100, self._poll_results)
 
     def _center_main_window(self) -> None:
@@ -492,8 +481,7 @@ class CentralApp(tk.Tk):
                 ("Cortar páginas", self.trim),
                 ("Compactar PDF", self.compress),
                 ("Separar em lotes", self.separate_batch),
-                ("Ocultar informações", self.redact_information),
-                ("Detectar duplicados", self.detect_duplicates),
+                ("Tarjar Informações", self.redact_information),
             ],
             columns=4,
         ).pack(fill="x", pady=(0, 12))
@@ -516,7 +504,6 @@ class CentralApp(tk.Tk):
         ttk.Button(footer, text="Licença", command=self.show_license).pack(side="left", padx=(0, 8))
         ttk.Button(footer, text="Manual", command=self.show_manual).pack(side="left", padx=(0, 8))
         ttk.Button(footer, text="Configurações", command=self.output_settings).pack(side="left", padx=(0, 8))
-        ttk.Button(footer, text="Histórico", command=self.show_history).pack(side="left", padx=(0, 8))
         self.cancel_button = ttk.Button(footer, text="Cancelar operação", command=self.cancel_operation, state="disabled")
         self.cancel_button.pack(side="right", padx=(10, 0))
         self.progress = ttk.Progressbar(footer, mode="indeterminate", length=150)
@@ -642,19 +629,6 @@ class CentralApp(tk.Tk):
         except OSError:
             pass
 
-    def _register_installation_async(self) -> None:
-        folder = str(_read_machine_settings().get("pasta_inventario_instalacoes", "")).strip()
-        if not folder:
-            return
-
-        def worker() -> None:
-            try:
-                register_installation(folder, __version__)
-            except OSError:
-                pass
-
-        threading.Thread(target=worker, daemon=True).start()
-
     def cancel_operation(self) -> None:
         if self._busy and self._cancel_event is not None:
             self._cancel_event.set()
@@ -779,18 +753,6 @@ class CentralApp(tk.Tk):
                 return
             self._run("Aplicando tarjas permanentes...", redact_pdf, source, output, dialog.result)
 
-    def detect_duplicates(self) -> None:
-        folder = filedialog.askdirectory(parent=self, title="Escolha a pasta que será verificada")
-        if not folder:
-            return
-        self._run(
-            "Procurando PDFs duplicados...",
-            find_duplicate_pdfs,
-            folder,
-            cancellable=True,
-            on_success=lambda groups: DuplicatePDFDialog(self, groups),
-        )
-
     def to_jpg(self) -> None:
         source = self._pick_pdf("Escolha o PDF")
         if not source:
@@ -882,6 +844,14 @@ class CentralApp(tk.Tk):
         )
 
     def output_settings(self) -> None:
+        dialog = SettingsMenuDialog(self)
+        self.wait_window(dialog)
+        if dialog.result == "historico":
+            self.show_history()
+        elif dialog.result == "administrativas":
+            self._open_administrative_settings()
+
+    def _open_administrative_settings(self) -> None:
         if sys.platform == "win32" and not is_process_elevated():
             if not launch_elevated_settings():
                 messagebox.showerror(
@@ -890,9 +860,7 @@ class CentralApp(tk.Tk):
                     parent=self,
                 )
             return
-        dialog = OutputSettingsDialog(
-            self, _load_output_settings(), _load_network_scanners(), _load_inventory_folder()
-        )
+        dialog = OutputSettingsDialog(self, _load_output_settings(), _load_network_scanners())
         self.wait_window(dialog)
 
     def show_license(self) -> None:
@@ -993,12 +961,16 @@ class CentralApp(tk.Tk):
 
     def scan(self) -> None:
         try:
-            devices = list_scanners()
+            devices = filter_direct_scanners(list_scanners())
         except Exception as exc:
             messagebox.showerror(APP_TITLE, str(exc), parent=self)
             return
         if not devices:
-            messagebox.showwarning(APP_TITLE, "Nenhum scanner WIA foi encontrado no Windows.", parent=self)
+            messagebox.showwarning(
+                APP_TITLE,
+                "Nenhum scanner USB ou conectado diretamente ao computador foi encontrado pelo WIA.",
+                parent=self,
+            )
             return
         dialog = ScanDialog(self, devices, find_tesseract(app_directory()) is not None)
         self.wait_window(dialog)
@@ -1365,6 +1337,41 @@ class NetworkScannerEntryDialog(BaseDialog):
         self.destroy()
 
 
+class SettingsMenuDialog(BaseDialog):
+    def __init__(self, parent: tk.Misc) -> None:
+        super().__init__(parent, "Configurações")
+        ttk.Label(
+            self.body,
+            text="Escolha a área que deseja abrir.",
+            font=("Segoe UI", 11, "bold"),
+        ).grid(row=0, column=0, sticky="w", pady=(0, 12))
+        ttk.Button(
+            self.body,
+            text="Histórico de operações",
+            command=lambda: self._select("historico"),
+            width=38,
+        ).grid(row=1, column=0, sticky="ew", pady=4)
+        ttk.Button(
+            self.body,
+            text="Configurações administrativas",
+            command=lambda: self._select("administrativas"),
+            width=38,
+        ).grid(row=2, column=0, sticky="ew", pady=4)
+        ttk.Label(
+            self.body,
+            text="As configurações administrativas exigem autorização do Windows.",
+            foreground="#476582",
+        ).grid(row=3, column=0, sticky="w", pady=(10, 0))
+        ttk.Button(self.body, text="Fechar", command=self.destroy).grid(
+            row=4, column=0, sticky="e", pady=(16, 0)
+        )
+        self.after_idle(self._show_centered)
+
+    def _select(self, value: str) -> None:
+        self.result = value
+        self.destroy()
+
+
 class OutputSettingsDialog(BaseDialog):
     ALLOWED_FIELDS = {"serie", "data", "hora", "setor"}
 
@@ -1373,7 +1380,6 @@ class OutputSettingsDialog(BaseDialog):
         parent: tk.Misc,
         settings: dict,
         scanners: list[dict[str, str]],
-        inventory_folder: str = "",
     ) -> None:
         super().__init__(parent, "Configurações administrativas")
         self.scanners = [dict(item) for item in scanners]
@@ -1423,28 +1429,17 @@ class OutputSettingsDialog(BaseDialog):
                  "Exemplo: Scan_{serie}_{data}_{hora}_{setor}",
             foreground="#476582",
         ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(10, 0))
-        deployment = ttk.LabelFrame(self.body, text="Implantação institucional", padding=8)
-        deployment.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(12, 0))
-        deployment.columnconfigure(1, weight=1)
-        ttk.Label(deployment, text="Pasta compartilhada do inventário").grid(
-            row=0, column=0, sticky="w", padx=(0, 10), pady=4
-        )
-        self.inventory_folder = ttk.Entry(deployment, width=44)
-        self.inventory_folder.insert(0, inventory_folder)
-        self.inventory_folder.grid(row=0, column=1, sticky="ew", pady=4)
-        ttk.Button(deployment, text="Escolher...", command=self._choose_inventory_folder).grid(
-            row=0, column=2, padx=(6, 0), pady=4
-        )
-        actions = ttk.Frame(deployment)
-        actions.grid(row=1, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        transfer = ttk.LabelFrame(self.body, text="Arquivo de configurações", padding=8)
+        transfer.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(12, 0))
+        actions = ttk.Frame(transfer)
+        actions.pack(anchor="w")
         ttk.Button(actions, text="Exportar configurações", command=self._export_configuration).pack(side="left")
         ttk.Button(actions, text="Importar configurações", command=self._import_configuration).pack(side="left", padx=6)
-        ttk.Button(actions, text="Consultar instalações", command=self._show_installations).pack(side="left")
         ttk.Label(
-            deployment,
-            text="A pasta deve permitir gravação pelos computadores da ALAP. Nenhum documento é enviado.",
+            transfer,
+            text="O arquivo exportado contém os scanners de rede e as opções de saída.",
             foreground="#476582",
-        ).grid(row=2, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        ).pack(anchor="w", pady=(8, 0))
         self.body.columnconfigure(1, weight=1)
         self.buttons(self.accept)
 
@@ -1504,12 +1499,6 @@ class OutputSettingsDialog(BaseDialog):
             self.folder.delete(0, "end")
             self.folder.insert(0, selected)
 
-    def _choose_inventory_folder(self) -> None:
-        selected = filedialog.askdirectory(parent=self, title="Escolha a pasta compartilhada do inventário")
-        if selected:
-            self.inventory_folder.delete(0, "end")
-            self.inventory_folder.insert(0, selected)
-
     def _current_payload(self) -> dict:
         values = {
             "pasta_saida": self.folder.get().strip(),
@@ -1517,9 +1506,7 @@ class OutputSettingsDialog(BaseDialog):
             "setor": self.sector.get().strip(),
             "salvar_automaticamente": bool(self.automatic.get()),
         }
-        return _validate_configuration_payload(
-            _configuration_payload(values, self.scanners, self.inventory_folder.get().strip())
-        )
+        return _validate_configuration_payload(_configuration_payload(values, self.scanners))
 
     @staticmethod
     def _replace_entry(entry: ttk.Entry, value: str) -> None:
@@ -1567,24 +1554,11 @@ class OutputSettingsDialog(BaseDialog):
         self._replace_entry(self.template, output["modelo_nome"])
         self._replace_entry(self.sector, output["setor"])
         self.automatic.set(bool(output["salvar_automaticamente"]))
-        self._replace_entry(self.inventory_folder, payload["pasta_inventario_instalacoes"])
         messagebox.showinfo(
             APP_TITLE,
             "Configurações importadas. Clique em Continuar para salvá-las neste computador.",
             parent=self,
         )
-
-    def _show_installations(self) -> None:
-        folder = self.inventory_folder.get().strip()
-        if not folder:
-            messagebox.showinfo(APP_TITLE, "Informe a pasta compartilhada do inventário.", parent=self)
-            return
-        try:
-            records = list_installations(folder)
-        except OSError as exc:
-            messagebox.showerror(APP_TITLE, f"Não foi possível consultar o inventário: {exc}", parent=self)
-            return
-        InstallationInventoryDialog(self, records)
 
     def accept(self) -> None:
         try:
@@ -1603,18 +1577,11 @@ class OutputSettingsDialog(BaseDialog):
             except OSError as exc:
                 messagebox.showerror(APP_TITLE, f"Não foi possível acessar a pasta: {exc}", parent=self)
                 return
-        inventory_folder = payload["pasta_inventario_instalacoes"]
-        if inventory_folder:
-            try:
-                Path(inventory_folder).mkdir(parents=True, exist_ok=True)
-            except OSError as exc:
-                messagebox.showerror(APP_TITLE, f"Não foi possível acessar a pasta do inventário: {exc}", parent=self)
-                return
         try:
             data = _read_machine_settings()
             data["saida_digitalizacao"] = values
             data["scanners_rede"] = payload["scanners_rede"]
-            data["pasta_inventario_instalacoes"] = inventory_folder
+            data.pop("pasta_inventario_instalacoes", None)
             _write_machine_settings(data)
         except OSError as exc:
             messagebox.showerror(APP_TITLE, f"Não foi possível salvar as configurações: {exc}", parent=self)
@@ -1906,97 +1873,6 @@ class HistoryDialog(BaseDialog):
         self.grab_set()
 
 
-class DuplicatePDFDialog(BaseDialog):
-    def __init__(self, parent: tk.Misc, groups: list[list[Path]]) -> None:
-        super().__init__(parent, "PDFs duplicados")
-        self.groups = groups
-        self.resizable(True, True)
-        total = sum(len(group) for group in groups)
-        ttk.Label(
-            self.body,
-            text=(f"{len(groups)} grupo(s), contendo {total} arquivo(s) duplicado(s)."
-                  if groups else "Nenhum PDF duplicado foi encontrado."),
-            font=("Segoe UI", 10, "bold"),
-        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
-        self.text = tk.Text(self.body, wrap="none", font=("Consolas", 9), padx=10, pady=10)
-        vertical = ttk.Scrollbar(self.body, orient="vertical", command=self.text.yview)
-        horizontal = ttk.Scrollbar(self.body, orient="horizontal", command=self.text.xview)
-        self.text.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
-        lines: list[str] = []
-        for index, group in enumerate(groups, 1):
-            lines.append(f"GRUPO {index}")
-            lines.extend(str(path) for path in group)
-            lines.append("")
-        self.report = "\n".join(lines) if lines else "Nenhum PDF duplicado foi encontrado."
-        self.text.insert("1.0", self.report)
-        self.text.configure(state="disabled")
-        self.text.grid(row=1, column=0, sticky="nsew")
-        vertical.grid(row=1, column=1, sticky="ns")
-        horizontal.grid(row=2, column=0, sticky="ew")
-        self.body.rowconfigure(1, weight=1)
-        self.body.columnconfigure(0, weight=1)
-        actions = ttk.Frame(self.body)
-        actions.grid(row=3, column=0, columnspan=2, sticky="e", pady=(12, 0))
-        ttk.Button(actions, text="Salvar relatório", command=self._save).pack(side="left", padx=(0, 8))
-        ttk.Button(actions, text="Fechar", command=self.destroy).pack(side="left")
-        self.after_idle(lambda: HistoryDialog._show_size(self, 960, 620))
-
-    def _save(self) -> None:
-        target = filedialog.asksaveasfilename(
-            parent=self, title="Salvar relatório de duplicados", defaultextension=".txt",
-            initialfile=f"pdfs_duplicados_{datetime.now():%Y-%m-%d_%H-%M-%S}.txt",
-            filetypes=[("Arquivo de texto", "*.txt")],
-        )
-        if not target:
-            return
-        try:
-            Path(target).write_text(self.report, encoding="utf-8")
-        except OSError as exc:
-            messagebox.showerror(APP_TITLE, f"Não foi possível salvar o relatório: {exc}", parent=self)
-            return
-        messagebox.showinfo(APP_TITLE, "Relatório salvo com sucesso.", parent=self)
-
-
-class InstallationInventoryDialog(BaseDialog):
-    def __init__(self, parent: tk.Misc, records: list[dict[str, str]]) -> None:
-        super().__init__(parent, "Contagem institucional de instalações")
-        self.resizable(True, True)
-        ttk.Label(
-            self.body,
-            text=f"Computadores registrados: {len(records)}",
-            font=("Segoe UI", 11, "bold"),
-        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
-        columns = ("computador", "versao", "primeiro_uso", "ultimo_uso")
-        table = ttk.Treeview(self.body, columns=columns, show="headings", height=16)
-        headings = {
-            "computador": "Computador", "versao": "Versão",
-            "primeiro_uso": "Primeiro uso", "ultimo_uso": "Último uso",
-        }
-        widths = {"computador": 250, "versao": 90, "primeiro_uso": 220, "ultimo_uso": 220}
-        for column in columns:
-            table.heading(column, text=headings[column])
-            table.column(column, width=widths[column], anchor="w")
-        for record in records:
-            table.insert("", "end", values=tuple(record.get(column, "") for column in columns))
-        vertical = ttk.Scrollbar(self.body, orient="vertical", command=table.yview)
-        horizontal = ttk.Scrollbar(self.body, orient="horizontal", command=table.xview)
-        table.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
-        table.grid(row=1, column=0, sticky="nsew")
-        vertical.grid(row=1, column=1, sticky="ns")
-        horizontal.grid(row=2, column=0, sticky="ew")
-        self.body.rowconfigure(1, weight=1)
-        self.body.columnconfigure(0, weight=1)
-        ttk.Label(
-            self.body,
-            text="A contagem inclui os computadores que executaram o software e alcançaram a pasta compartilhada.",
-            foreground="#476582",
-        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 0))
-        ttk.Button(self.body, text="Fechar", command=self.destroy).grid(
-            row=4, column=0, columnspan=2, sticky="e", pady=(12, 0)
-        )
-        self.after_idle(lambda: HistoryDialog._show_size(self, 900, 560))
-
-
 class DiagnosticDialog(BaseDialog):
     def __init__(self, parent: tk.Misc, report: str) -> None:
         super().__init__(parent, "Diagnóstico do scanner")
@@ -2250,7 +2126,7 @@ class ScanDialog(BaseDialog):
         self.language.grid(row=7, column=1, pady=5)
         ttk.Label(
             self.body,
-            text="A lista inclui scanners de rede e USB instalados no Windows.",
+            text="A lista mostra scanners USB ou conectados diretamente ao computador.",
         ).grid(row=8, column=0, columnspan=2, sticky="w", pady=(8, 0))
         self.remove_blank = tk.BooleanVar(value=False)
         self.auto_deskew = tk.BooleanVar(value=False)
@@ -2631,9 +2507,7 @@ def _run_administrative_settings() -> None:
         )
         root.destroy()
         return
-    dialog = OutputSettingsDialog(
-        root, _load_output_settings(), _load_network_scanners(), _load_inventory_folder()
-    )
+    dialog = OutputSettingsDialog(root, _load_output_settings(), _load_network_scanners())
     root.wait_window(dialog)
     root.destroy()
 
@@ -2643,7 +2517,7 @@ def main() -> None:
         try:
             import ctypes
 
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ALAP.PDFScanner.v290")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ALAP.PDFScanner.v291")
         except (AttributeError, OSError):
             pass
     if "--configuracoes" in sys.argv:

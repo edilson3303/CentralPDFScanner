@@ -90,6 +90,11 @@ def list_scanners() -> list[ScannerDevice]:
     return devices
 
 
+def filter_direct_scanners(devices: list[ScannerDevice]) -> list[ScannerDevice]:
+    """Exclui dispositivos que o WIA identificou explicitamente como rede."""
+    return [device for device in devices if device.connection_type != "Rede"]
+
+
 def _detect_connection_type(details: str) -> str:
     value = details.upper().replace("Í", "I")
     network_hints = ("WSD", "TCPIP", "TCP/IP", "NETWORK", "REDE", "WI-FI", "WIFI", "ETHERNET", "WIAIP")

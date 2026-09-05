@@ -54,7 +54,7 @@ def mock_screen(title: str, kind: str) -> BytesIO:
         draw.text((1080, 80), "PDF & Scanner", font=font(30, True), fill=NAVY)
         sections = [
             (180, "Digitalização", ["Scanner USB", "Scanner de rede", "Testar scanner"], True),
-            (340, "Edição de PDF", ["Juntar PDFs", "Dividir PDF", "Proteger PDF", "Desproteger PDF", "Remover páginas", "Rotacionar páginas", "Cortar páginas", "Compactar PDF", "Separar em lotes", "Ocultar informações", "Detectar duplicados"], False),
+            (340, "Edição de PDF", ["Juntar PDFs", "Dividir PDF", "Proteger PDF", "Desproteger PDF", "Remover páginas", "Rotacionar páginas", "Cortar páginas", "Compactar PDF", "Separar em lotes", "Tarjar Informações"], False),
             (610, "Conversões", ["PDF para Word", "Word para PDF", "PDF para JPG", "JPG para PDF", "PDF Digitalizado para OCR", "PDF/A (arquivamento)"], False),
         ]
         for top, heading, labels, primary in sections:
@@ -85,14 +85,21 @@ def mock_screen(title: str, kind: str) -> BytesIO:
             draw.text((40, y), label, font=font(18, True), fill=TEXT)
             draw.rectangle((310, y - 8, 1320, y + 38), fill="white", outline="#9aa9ba")
             draw.text((325, y), value, font=font(17), fill=TEXT)
-        draw.text((40, 690), "Implantação institucional", font=font(18, True), fill=NAVY)
-        for idx, label in enumerate(("Exportar configurações", "Importar configurações", "Consultar instalações")):
+        draw.text((40, 690), "Arquivo de configurações", font=font(18, True), fill=NAVY)
+        for idx, label in enumerate(("Exportar configurações", "Importar configurações")):
             button((310 + idx * 320, 675, 595 + idx * 320, 725), label)
         button((1115, 745, 1260, 797), "Salvar", True)
         button((1270, 745, 1380, 797), "Cancelar")
-    elif kind == "scan":
+    elif kind in {"scan", "usb_scan"}:
+        usb = kind == "usb_scan"
         labels = ["Scanner cadastrado", "Resolução", "Modo", "Origem", "Tamanho do papel", "Formato de saída", "Idioma OCR"]
-        values = ["Scanner de rede 1 - IP oculto", "300", "Cor", "Alimentador superior - frente e verso", "A4 (210 × 297 mm)", "PDF", "Português + Inglês"]
+        if usb:
+            labels[0] = "Scanner USB"
+        values = [
+            "Multifuncional conectada à porta USB" if usb else "Scanner de rede 1 - IP oculto",
+            "300", "Cor", "Alimentador superior - frente e verso",
+            "A4 (210 × 297 mm)", "PDF", "Português + Inglês",
+        ]
         for idx, (label, value) in enumerate(zip(labels, values)):
             y = 82 + idx * 58
             draw.text((120, y), label, font=font(19, True), fill=TEXT)
@@ -151,6 +158,12 @@ def mock_screen(title: str, kind: str) -> BytesIO:
             draw.line((570, 270 + idx * 42, 1010, 270 + idx * 42), fill="#9aa9ba", width=2)
         draw.rectangle((650, 380, 955, 425), fill="black", outline="#dc2626", width=3)
         button((1120, 752, 1310, 805), "Aplicar tarjas", True)
+    elif kind == "settings_menu":
+        draw.text((70, 105), "Escolha a área que deseja abrir.", font=font(24, True), fill=NAVY)
+        button((250, 220, 1150, 315), "Histórico de operações", True)
+        button((250, 350, 1150, 445), "Configurações administrativas")
+        draw.text((250, 500), "As configurações administrativas exigem autorização do Windows.", font=font(19), fill=TEXT)
+        button((1160, 730, 1335, 790), "Fechar")
     elif kind == "history":
         draw.text((35, 85), "Histórico local de operações", font=font(23, True), fill=NAVY)
         headers = ["Data e hora", "Operação", "Status", "Usuário", "Computador", "Versão"]
@@ -160,7 +173,7 @@ def mock_screen(title: str, kind: str) -> BytesIO:
             draw.rectangle((x, 140, x + width, 190), fill="#dce8f5", outline="#9aa9ba")
             draw.text((x + 10, 153), label, font=font(16, True), fill=TEXT)
             x += width
-        operations = [("05/09/2026 14:20", "Aplicando tarjas permanentes", "Concluída"), ("05/09/2026 14:12", "Procurando PDFs duplicados", "Concluída"), ("05/09/2026 13:50", "Digitalizando páginas", "Cancelada")]
+        operations = [("05/09/2026 14:20", "Aplicando tarjas permanentes", "Concluída"), ("05/09/2026 14:12", "Compactando PDF", "Concluída"), ("05/09/2026 13:50", "Digitalizando páginas", "Cancelada")]
         for row, values in enumerate(operations):
             y = 205 + row * 62
             draw.text((45, y), values[0], font=font(16), fill=TEXT)
@@ -168,18 +181,10 @@ def mock_screen(title: str, kind: str) -> BytesIO:
             draw.text((635, y), values[2], font=font(16), fill=TEXT)
             draw.text((785, y), "usuário", font=font(16), fill=TEXT)
             draw.text((955, y), "PC-ALAP", font=font(16), fill=TEXT)
-            draw.text((1175, y), "2.9.0", font=font(16), fill=TEXT)
+            draw.text((1175, y), "2.9.1", font=font(16), fill=TEXT)
             draw.line((35, y + 35, 1365, y + 35), fill="#d6dee8")
         button((1040, 740, 1215, 795), "Exportar CSV", True)
         button((1230, 740, 1365, 795), "Fechar")
-    elif kind == "duplicates":
-        draw.text((35, 85), "2 grupos encontrados — comparação exata por SHA-256", font=font(21, True), fill=NAVY)
-        draw.rounded_rectangle((35, 140, 1365, 700), radius=8, fill="white", outline="#9aa9ba", width=2)
-        lines = ["GRUPO 1", r"C:\Documentos\processo.pdf", r"C:\Documentos\Cópias\processo.pdf", "", "GRUPO 2", r"C:\Arquivo\relatorio.pdf", r"C:\Arquivo\antigos\relatorio_copia.pdf"]
-        for idx, line in enumerate(lines):
-            draw.text((65, 170 + idx * 55), line, font=font(18, idx in {0, 4}), fill=TEXT)
-        button((1090, 735, 1250, 790), "Salvar relatório", True)
-        button((1260, 735, 1370, 790), "Fechar")
     else:
         draw.text((70, 100), "Pré-visualização e processamento local", font=font(27, True), fill=NAVY)
         draw.rounded_rectangle((70, 175, 1330, 650), radius=15, fill="white", outline="#9aa9ba", width=2)
@@ -233,13 +238,13 @@ def build_manual() -> None:
         Paragraph("MANUAL DO USUÁRIO", styles["ManualTitle"]),
         Paragraph("PDF & Scanner - Assembleia Legislativa do Estado do Amapá - ALAP", styles["ManualTitle"]),
         Spacer(1, 1.5 * cm),
-        Paragraph("Versão 2.9.0 | Processamento local de documentos", ParagraphStyle(name="Cover", parent=body, alignment=TA_CENTER, fontSize=13)),
+        Paragraph("Versão 2.9.1 | Processamento local de documentos", ParagraphStyle(name="Cover", parent=body, alignment=TA_CENTER, fontSize=13)),
         PageBreak(),
     ])
 
-    chapter("1. Visão geral", "O PDF & Scanner reúne digitalização, edição, proteção, conversão e arquivamento de documentos em uma única tela.", "Tela principal", "home", ["Escolha a seção desejada: Digitalização, Edição de PDF ou Conversões.", "Clique na função. As janelas internas abrem centralizadas.", "Acompanhe o andamento na barra inferior e use Cancelar operação quando necessário.", "Use Licença para consultar os termos institucionais."], "Todo o processamento é local.")
+    chapter("1. Visão geral", "O PDF & Scanner reúne digitalização, edição, proteção, conversão e arquivamento de documentos em uma única tela.", "Tela principal", "home", ["Escolha a seção desejada: Digitalização, Edição de PDF ou Conversões.", "Clique na função. As janelas internas abrem centralizadas.", "Acompanhe o andamento na barra inferior e use Cancelar operação quando necessário.", "Use Configurações para acessar o histórico ou as opções administrativas.", "Use Licença para consultar os termos institucionais."], "Todo o processamento é local.")
     chapter("2. Configurações administrativas", "As configurações do computador e os endereços IP somente podem ser alterados após a autorização do UAC do Windows.", "Configurações administrativas", "settings", ["Clique em Configurações.", "Se a conta atual não estiver elevada, informe no UAC o usuário e a senha de um administrador local ou do Active Directory.", "Use Adicionar para cadastrar nome e IP de cada multifuncional.", "Defina pasta padrão, modelo de nome e setor.", "Use Exportar configurações para criar uma cópia JSON ou Importar configurações para restaurá-la; revise e clique em Continuar."], "O arquivo exportado contém os IPs cadastrados e deve permanecer em local administrativo protegido.")
-    chapter("3. Scanner USB", "Use esta opção para scanners USB ou equipamentos instalados no Windows com driver WIA.", "Digitalizar documento", "scan", ["Clique em Scanner USB.", "Escolha o equipamento, a origem, a resolução e o modo Cor, que é o padrão.", "Escolha o tamanho do papel: Automático, A4, Carta, Ofício, Legal, A3 ou A5.", "Escolha PDF ou JPG e, se necessário, marque OCR e correções automáticas.", "Coloque as folhas no alimentador ou o documento no vidro, clique em Continuar, revise as miniaturas e salve."], "O driver completo WIA do fabricante deve estar instalado.")
+    chapter("3. Scanner USB", "Use esta opção somente para scanners USB ou conectados diretamente ao computador com driver WIA.", "Digitalizar com Scanner USB", "usb_scan", ["Conecte o scanner à porta USB e ligue o equipamento.", "Clique em Scanner USB. A lista não utiliza os scanners cadastrados por endereço IP.", "Escolha o equipamento USB, a origem, a resolução e o modo Cor, que é o padrão.", "Escolha o tamanho do papel, PDF ou JPG e, se necessário, marque OCR e correções automáticas.", "Clique em Continuar, revise as miniaturas e salve."], "O driver completo WIA do fabricante deve estar instalado. Os equipamentos por IP aparecem somente em Scanner de rede.")
     chapter("4. Scanner de rede", "Os scanners cadastrados por um administrador aparecem em uma lista para escolha do usuário.", "Scanner de rede", "scan", ["Clique em Scanner de rede.", "Escolha a multifuncional cadastrada.", "Aguarde a detecção de vidro, alimentador simples e frente e verso.", "Escolha origem, resolução, modo, tamanho do papel, formato e OCR.", "Clique em Continuar, revise as páginas e salve."], "A digitalização direta exige eSCL/AirScan e comunicação com o IP na rede local.")
     chapter("5. Pré-visualização", "Antes de salvar uma digitalização, revise a ordem, a orientação e as páginas que permanecerão no documento.", "Pré-visualização das páginas", "thumbnails", ["Clique em uma miniatura para selecioná-la.", "Use Ctrl+clique para páginas separadas e Shift+clique para um intervalo.", "Use os comandos para mover, girar ou excluir.", "Role verticalmente para visualizar o restante.", "Clique em Salvar digitalização."], "Confira o documento antes de excluir páginas.")
     chapter("6. Juntar PDFs", "A janela é dimensionada automaticamente e organiza até cinco miniaturas por linha.", "Juntar PDFs - organize as páginas", "thumbnails", ["Clique em Juntar PDFs e selecione dois ou mais arquivos.", "Selecione páginas com Ctrl ou Shift.", "Use Mover antes e Mover depois para alterar a ordem.", "Use Remover da união para retirar páginas.", "Clique em Juntar, escolha o nome do resultado e aguarde a conclusão."], "Selecionar todas e Limpar facilitam documentos extensos.")
@@ -250,11 +255,9 @@ def build_manual() -> None:
     chapter("11. Conversões", "A seção Conversões possui quatro botões por linha e mantém os documentos no computador.", "Conversões", "home", ["PDF para Word: escolha o PDF e salve um DOCX editável.", "Word para PDF: escolha DOC ou DOCX; o programa usa Word ou LibreOffice.", "PDF para JPG: escolha resolução e pasta de destino.", "JPG para PDF: selecione as imagens na ordem desejada.", "PDF Digitalizado para OCR: cria um PDF pesquisável.", "PDF/A (arquivamento): gera PDF/A-2b com o LibreOffice instalado."], "Conversões complexas podem variar conforme fontes e elementos do arquivo original.")
     chapter("12. OCR", "O OCR reconhece texto em documentos digitalizados e cria uma camada pesquisável.", "Opções de OCR", "scan", ["Marque Aplicar OCR durante a digitalização ou use PDF Digitalizado para OCR.", "Escolha o idioma pelo nome completo.", "Acompanhe a indicação Aplicando OCR e o número da página.", "Use Cancelar operação se necessário.", "Pesquise ou selecione o texto no PDF resultante."], "OCR, orientação automática e resoluções altas aumentam o tempo de processamento.")
     chapter("13. Diagnóstico e solução de problemas", "O botão Testar scanner verifica todos os scanners cadastrados e gera um relatório sem copiar o conteúdo dos documentos.", "Diagnóstico", "generic", ["Clique em Testar scanner.", "Confira todos os scanners WIA, todos os scanners de rede cadastrados e o OCR.", "O relatório oculta os IPs, a versão do Windows, a arquitetura, o Python interno e o caminho do OCR.", "Copie ou salve o relatório para atendimento técnico.", "Em erro de alimentador, retire folhas presas, alinhe o papel e aguarde o equipamento ficar livre."], "Nunca desative controles de segurança do Windows para contornar um erro.")
-    chapter("14. Ocultar informações com tarja", "A tarja permanente remove o texto e a imagem da área marcada; não é apenas um retângulo desenhado sobre o conteúdo.", "Tarja para ocultar informações", "redaction", ["Clique em Ocultar informações e escolha o PDF.", "Selecione uma página na lista lateral.", "Arraste o mouse sobre cada dado que deve ser removido.", "Use Desfazer última tarja ou Limpar página para corrigir a marcação.", "Clique em Aplicar tarjas, confirme e salve como um novo PDF."], "Abra e pesquise o resultado antes de distribuir. A remoção no novo arquivo é definitiva.")
-    chapter("15. Detectar PDFs duplicados", "A ferramenta procura cópias exatas em uma pasta e em todas as subpastas, sem enviar arquivos para a internet.", "Relatório de PDFs duplicados", "duplicates", ["Clique em Detectar duplicados.", "Escolha a pasta que será verificada.", "Acompanhe a comparação e cancele, se necessário.", "Confira os grupos de caminhos encontrados.", "Salve o relatório em TXT antes de decidir manualmente o que deve ser removido."], "O programa não apaga arquivos. PDFs visualmente iguais, mas com metadados diferentes, não são classificados como cópias exatas.")
-    chapter("16. Histórico de operações", "O histórico ajuda no acompanhamento local e registra somente metadados operacionais.", "Histórico de operações", "history", ["Clique em Histórico na parte inferior da tela principal.", "Consulte data, operação, resultado, usuário, computador e versão.", "Use a barra de rolagem para navegar.", "Clique em Exportar CSV para produzir um relatório.", "Feche a janela para voltar à tela principal."], "O histórico não guarda nomes, caminhos, conteúdo dos documentos ou senhas.")
-    chapter("17. Contagem institucional", "A contagem usa uma pasta compartilhada interna definida pelo administrador e não utiliza telemetria pela internet.", "Configurações administrativas", "settings", ["A TI deve criar uma pasta compartilhada interna para o inventário.", "Conceda aos computadores ou usuários autorizados permissão para criar e atualizar arquivos nessa pasta.", "Em Configurações, informe a pasta compartilhada e clique em Continuar.", "Cada computador registra identificador técnico irreversível, nome, versão, primeiro e último uso.", "Clique em Consultar instalações para ver o total e a lista."], "A contagem representa computadores que executaram o software e alcançaram a pasta. Nenhum documento, senha ou conteúdo é registrado.")
-    chapter("18. Privacidade, licença e atalhos", "O instalador cria atalhos para todos os usuários e mantém os termos institucionais acessíveis.", "Uso institucional", "generic", ["Os atalhos são criados no Menu Iniciar comum e, quando escolhido, na Área de Trabalho pública.", "Clique em Licença para consultar e copiar os termos.", "Os documentos permanecem no computador.", "Proteja documentos sigilosos conforme as normas da ALAP.", "Mantenha o software atualizado e valide novas versões antes da implantação ampla."])
+    chapter("14. Tarjar Informações", "A tarja permanente remove o texto e a imagem da área marcada; não é apenas um retângulo desenhado sobre o conteúdo.", "Tarja para ocultar informações", "redaction", ["Clique em Tarjar Informações e escolha o PDF.", "Selecione uma página na lista lateral.", "Arraste o mouse sobre cada dado que deve ser removido.", "Use Desfazer última tarja ou Limpar página para corrigir a marcação.", "Clique em Aplicar tarjas, confirme e salve como um novo PDF."], "Abra e pesquise o resultado antes de distribuir. A remoção no novo arquivo é definitiva.")
+    chapter("15. Histórico dentro de Configurações", "O histórico ajuda no acompanhamento local e registra somente metadados operacionais.", "Menu Configurações", "settings_menu", ["Clique em Configurações na tela principal.", "Escolha Histórico de operações; essa consulta não exige acesso administrativo.", "Consulte data, operação, resultado, usuário, computador e versão.", "Clique em Exportar CSV para produzir um relatório.", "Feche a janela para voltar à tela principal."], "O histórico não guarda nomes, caminhos, conteúdo dos documentos ou senhas.")
+    chapter("16. Privacidade, licença e atalhos", "O instalador cria atalhos para todos os usuários e mantém os termos institucionais acessíveis.", "Uso institucional", "generic", ["Os atalhos são criados no Menu Iniciar comum e, quando escolhido, na Área de Trabalho pública.", "Clique em Licença para consultar e copiar os termos.", "Os documentos permanecem no computador.", "Proteja documentos sigilosos conforme as normas da ALAP.", "Mantenha o software atualizado e valide novas versões antes da implantação ampla."])
 
     def decorate(canvas, document):
         canvas.saveState()

@@ -32,7 +32,7 @@ from central_pdf_scanner.pdf_tools import (
     trim_vertical_pdf,
     unprotect_pdf,
 )
-from central_pdf_scanner.scanner import _detect_connection_type
+from central_pdf_scanner.scanner import _detect_connection_type, filter_direct_scanners
 from central_pdf_scanner.escl_scanner import (
     ESCLScannerError,
     detect_escl_sources,
@@ -440,6 +440,17 @@ class PDFToolsTests(unittest.TestCase):
         self.assertEqual(_detect_connection_type(r"USBSCAN\\VID_1234"), "USB / conectado")
         self.assertEqual(_detect_connection_type("SWD DAFWSDProvider WSD Scanner"), "Rede")
         self.assertEqual(_detect_connection_type("Scanner virtual"), "Instalado no Windows")
+
+    def test_scanner_usb_excludes_devices_identified_as_network(self) -> None:
+        devices = [
+            ScannerDevice("usb", "Scanner USB", "USB / conectado"),
+            ScannerDevice("rede", "Scanner WSD", "Rede"),
+            ScannerDevice("local", "Scanner local", "Instalado no Windows"),
+        ]
+        self.assertEqual(
+            [device.device_id for device in filter_direct_scanners(devices)],
+            ["usb", "local"],
+        )
 
     def test_wia_scanner_source_detection(self) -> None:
         self.assertEqual(_sources_from_wia_capabilities(2), ("Vidro",))

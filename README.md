@@ -1,8 +1,8 @@
 # PDF & Scanner
 
-Versão atual: 2.9.0
+Versão atual: 2.9.1
 
-Esta versão acrescenta tarja permanente para ocultar informações, importação e exportação das configurações administrativas, histórico local de operações, contagem institucional de computadores e detecção de PDFs duplicados.
+Esta versão mantém a tarja permanente e o histórico local, move o acesso ao histórico para Configurações, remove o inventário institucional e a detecção de duplicados e separa os scanners USB dos scanners de rede cadastrados.
 
 Também oferece progresso detalhado com cancelamento, PDF/A-2b, compactação, separação automática de lotes e pasta/nomenclatura configuráveis.
 
@@ -14,14 +14,14 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 
 ## Funções
 
-- Digitalizar usando scanners instalados no Windows, inclusive multifuncionais de rede
+- Digitalizar usando scanners USB ou conectados diretamente ao computador pelo WIA
 - Cadastrar vários scanners por nome e IP em uma configuração protegida pelo UAC do Windows
 - Escolher um scanner de rede cadastrado e digitalizar diretamente por eSCL/AirScan
 - Detectar automaticamente e escolher entre o vidro e o alimentador superior, quando disponíveis
 - Digitalizar automaticamente todas as folhas do alimentador em um único PDF
 - Digitalizar frente e verso quando o alimentador da multifuncional oferecer duplex
 - Memorizar o último scanner de rede utilizado
-- Escolher na lista scanners de rede, USB ou outros scanners instalados no Windows
+- Manter separados os scanners USB e os scanners de rede cadastrados por endereço IP
 - Salvar a digitalização em PDF ou JPG, com nome automático contendo número de série, data e hora
 - Escolher digitalização normal ou PDF pesquisável com OCR; idiomas aparecem por nome completo
 - Testar scanners WIA, conexão eSCL e OCR e salvar um relatório técnico sem conteúdo dos documentos
@@ -36,10 +36,8 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 - Separar lotes por página em branco, quantidade de páginas ou código de barras/QR Code
 - Configurar, com credenciais administrativas, scanners de rede, pasta padrão, salvamento automático, setor e modelo de nome
 - Exportar e importar, em JSON validado, os scanners e as configurações administrativas
-- Registrar histórico local de operações, sem nomes nem conteúdo dos documentos, e exportá-lo em CSV
-- Contar os computadores que executaram o software por meio de uma pasta compartilhada interna configurada pela administração
-- Ocultar informações com tarjas permanentes que removem o conteúdo marcado do novo PDF
-- Detectar cópias exatas de PDFs em uma pasta e suas subpastas por tamanho e SHA-256
+- Consultar, dentro de Configurações, o histórico local de operações e exportá-lo em CSV
+- Tarjar informações permanentemente, removendo o conteúdo marcado do novo PDF
 - Trabalhar visualmente com miniaturas ao remover, juntar, dividir, girar ou cortar páginas
 - Cortar margens superior e inferior em centímetros
 - Converter PDF para Word editável de alta fidelidade, sem exigir o Microsoft Word
@@ -72,13 +70,7 @@ Depois de extraído, o pacote abre por `PDFScannerALAP.exe` sem instalar Python 
 
 ## Gerar o instalador do Windows
 
-O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.9.0.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
-
-## Implantação e inventário institucional
-
-Em **Configurações**, um administrador pode informar uma pasta compartilhada interna para o inventário. Cada computador que executar o programa grava um registro técnico com identificador derivado e irreversível, nome do computador, versão e datas do primeiro e do último uso. O inventário não recebe documentos, senhas, nomes de arquivos nem conteúdo processado. A pasta deve permitir criação e atualização de arquivos pelos computadores ou usuários autorizados da ALAP.
-
-O total representa os computadores que executaram o software e conseguiram alcançar essa pasta; ele não é telemetria pela internet nem comprovação isolada de que o instalador permanece instalado.
+O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.9.1.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
 
 ## Cadastrar e usar scanners de rede
 

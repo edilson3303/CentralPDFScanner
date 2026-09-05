@@ -1,4 +1,4 @@
-PDF & SCANNER 2.9.0
+PDF & SCANNER 2.9.1
 =================
 
 COMO ABRIR A VERSÃO PORTÁTIL
@@ -19,14 +19,13 @@ CONFIGURAÇÕES ADMINISTRATIVAS
 - A pasta padrão, o salvamento automático, o setor e o modelo do nome também
   ficam na configuração administrativa comum do computador.
 - As configurações podem ser exportadas e importadas em arquivo JSON validado.
-- Uma pasta compartilhada interna pode ser definida para contar os computadores
-  que executaram o software. Ela não recebe documentos, senhas nem conteúdo.
+- Dentro do botão "Configurações", o histórico local pode ser consultado e
+  exportado sem exigir acesso às configurações administrativas.
 
 PRIVACIDADE E CONTROLE
-- "Ocultar informações" permite desenhar tarjas que removem definitivamente o
+- "Tarjar Informações" permite desenhar tarjas que removem definitivamente o
   conteúdo selecionado do novo PDF.
-- "Detectar duplicados" localiza cópias exatas de PDFs em uma pasta e subpastas.
-- "Histórico" mostra as operações locais e permite exportar CSV; não registra
+- O histórico mostra as operações locais e permite exportar CSV; não registra
   nomes nem conteúdo dos documentos.
 
 SCANNERS DE REDE
@@ -42,8 +41,10 @@ SCANNERS DE REDE
 - Testar scanner verifica todos os equipamentos cadastrados e oculta IPs e dados internos no relatório.
 
 SCANNER USB
-- O scanner deve aparecer em Configurações do Windows > Bluetooth e dispositivos
+- O scanner deve estar conectado diretamente ao computador e aparecer em
+  Configurações do Windows > Bluetooth e dispositivos
   > Impressoras e scanners.
+- Os scanners cadastrados por endereço IP aparecem somente em "Scanner de rede".
 - Estar visível apenas como impressora não basta: o componente WIA do scanner
   também precisa estar instalado.
 - Alguns aparelhos antigos oferecem apenas TWAIN; procure o driver WIA mais

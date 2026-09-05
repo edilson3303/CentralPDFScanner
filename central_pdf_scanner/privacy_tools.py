@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-import hashlib
-import threading
 from pathlib import Path
 from collections.abc import Sequence
 
 import fitz
-
-from .progress import ProgressCallback, check_cancel, report
-
 
 class PrivacyToolError(RuntimeError):
     pass
@@ -45,34 +40,3 @@ def redact_pdf(
     finally:
         document.close()
     return destination
-
-
-def file_sha256(path: str | Path, cancel_event: threading.Event | None = None) -> str:
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            check_cancel(cancel_event)
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def find_duplicate_pdfs(
-    directory: str | Path,
-    *,
-    cancel_event: threading.Event | None = None,
-    progress_callback: ProgressCallback | None = None,
-) -> list[list[Path]]:
-    folder = Path(directory)
-    if not folder.is_dir():
-        raise PrivacyToolError("Escolha uma pasta válida.")
-    files = sorted(path for path in folder.rglob("*.pdf") if path.is_file())
-    by_size: dict[int, list[Path]] = {}
-    for path in files:
-        by_size.setdefault(path.stat().st_size, []).append(path)
-    candidates = [path for group in by_size.values() if len(group) > 1 for path in group]
-    hashes: dict[str, list[Path]] = {}
-    for index, path in enumerate(candidates, 1):
-        check_cancel(cancel_event)
-        report(progress_callback, f"Comparando PDF {index} de {len(candidates)}...")
-        hashes.setdefault(file_sha256(path, cancel_event), []).append(path)
-    return [paths for paths in hashes.values() if len(paths) > 1]
