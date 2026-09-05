@@ -1,8 +1,8 @@
 # PDF & Scanner
 
-Versão atual: 2.8.3
+Versão atual: 2.9.0
 
-Esta versão corrige o ícone da barra de título no Windows, inclui o setor no nome padrão dos arquivos digitalizados, permite escolher o tamanho do papel e testa todos os scanners cadastrados sem expor dados técnicos sensíveis no relatório.
+Esta versão acrescenta tarja permanente para ocultar informações, importação e exportação das configurações administrativas, histórico local de operações, contagem institucional de computadores e detecção de PDFs duplicados.
 
 Também oferece progresso detalhado com cancelamento, PDF/A-2b, compactação, separação automática de lotes e pasta/nomenclatura configuráveis.
 
@@ -35,6 +35,11 @@ A interface utiliza a identidade visual da Assembleia Legislativa do Estado do A
 - Compactar PDFs em alta qualidade, modo equilibrado ou tamanho reduzido, comparando antes e depois
 - Separar lotes por página em branco, quantidade de páginas ou código de barras/QR Code
 - Configurar, com credenciais administrativas, scanners de rede, pasta padrão, salvamento automático, setor e modelo de nome
+- Exportar e importar, em JSON validado, os scanners e as configurações administrativas
+- Registrar histórico local de operações, sem nomes nem conteúdo dos documentos, e exportá-lo em CSV
+- Contar os computadores que executaram o software por meio de uma pasta compartilhada interna configurada pela administração
+- Ocultar informações com tarjas permanentes que removem o conteúdo marcado do novo PDF
+- Detectar cópias exatas de PDFs em uma pasta e suas subpastas por tamanho e SHA-256
 - Trabalhar visualmente com miniaturas ao remover, juntar, dividir, girar ou cortar páginas
 - Cortar margens superior e inferior em centímetros
 - Converter PDF para Word editável de alta fidelidade, sem exigir o Microsoft Word
@@ -67,7 +72,13 @@ Depois de extraído, o pacote abre por `PDFScannerALAP.exe` sem instalar Python 
 
 ## Gerar o instalador do Windows
 
-O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.8.3.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
+O fluxo do GitHub gera `PDF_Scanner_ALAP_Setup_v2.9.0.exe` com Inno Setup. Para gerar localmente, instale o Inno Setup 6, execute primeiro `build_portable.bat` e depois `build_installer.bat`.
+
+## Implantação e inventário institucional
+
+Em **Configurações**, um administrador pode informar uma pasta compartilhada interna para o inventário. Cada computador que executar o programa grava um registro técnico com identificador derivado e irreversível, nome do computador, versão e datas do primeiro e do último uso. O inventário não recebe documentos, senhas, nomes de arquivos nem conteúdo processado. A pasta deve permitir criação e atualização de arquivos pelos computadores ou usuários autorizados da ALAP.
+
+O total representa os computadores que executaram o software e conseguiram alcançar essa pasta; ele não é telemetria pela internet nem comprovação isolada de que o instalador permanece instalado.
 
 ## Cadastrar e usar scanners de rede
 

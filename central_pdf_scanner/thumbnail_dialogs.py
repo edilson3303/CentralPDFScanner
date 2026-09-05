@@ -50,6 +50,12 @@ class ThumbnailDialog(tk.Toplevel):
         self.resizable(True, True)
         self.result = None
         self.protocol("WM_DELETE_WINDOW", self.destroy)
+        try:
+            inherited_icon = getattr(parent, "_window_icon", None)
+            if inherited_icon is not None:
+                self.iconphoto(True, inherited_icon)
+        except tk.TclError:
+            pass
 
     def show_centered(self, width: int = 940, height: int = 690) -> None:
         self.update_idletasks()
@@ -383,6 +389,192 @@ class MergePagesDialog(ThumbnailDialog):
         if not self.refs:
             return
         self.result = list(self.refs)
+        self.destroy()
+
+
+class RedactionDialog(ThumbnailDialog):
+    """Permite desenhar tarjas removidas definitivamente do PDF."""
+
+    def __init__(self, parent: tk.Misc, source: str | Path) -> None:
+        super().__init__(parent, "Tarja para ocultar informações")
+        self.source = Path(source)
+        self.document = fitz.open(self.source)
+        if self.document.needs_pass:
+            self.document.close()
+            raise ValueError("o arquivo está protegido por senha")
+        if len(self.document) == 0:
+            self.document.close()
+            raise ValueError("o arquivo não contém páginas")
+        self.page_index = 0
+        self.redactions: dict[int, list[fitz.Rect]] = {}
+        self.photo: ImageTk.PhotoImage | None = None
+        self.scale = 1.0
+        self.offset_x = 0.0
+        self.offset_y = 0.0
+        self.drag_start: tuple[float, float] | None = None
+        self.drag_item: int | None = None
+        self._render_after: str | None = None
+        self.protocol("WM_DELETE_WINDOW", self.close)
+
+        header = ttk.Frame(self, padding=(16, 12))
+        header.pack(fill="x")
+        ttk.Label(
+            header,
+            text="Arraste o mouse sobre cada informação que deve ser removida definitivamente.",
+            font=("Segoe UI", 10, "bold"),
+        ).pack(side="left")
+        self.summary = ttk.Label(header, text="")
+        self.summary.pack(side="right")
+
+        tools = ttk.Frame(self, padding=(16, 0, 16, 8))
+        tools.pack(fill="x")
+        ttk.Button(tools, text="Página anterior", command=lambda: self.change_page(-1)).pack(side="left")
+        ttk.Button(tools, text="Próxima página", command=lambda: self.change_page(1)).pack(side="left", padx=6)
+        ttk.Button(tools, text="Desfazer última tarja", command=self.undo).pack(side="left", padx=(16, 6))
+        ttk.Button(tools, text="Limpar página", command=self.clear_page).pack(side="left")
+
+        content = ttk.Frame(self)
+        content.pack(fill="both", expand=True, padx=16)
+        side = ttk.Frame(content)
+        side.pack(side="left", fill="y", padx=(0, 10))
+        self.pages = tk.Listbox(side, width=18, exportselection=False, font=("Segoe UI", 10))
+        page_scroll = ttk.Scrollbar(side, orient="vertical", command=self.pages.yview)
+        self.pages.configure(yscrollcommand=page_scroll.set)
+        self.pages.pack(side="left", fill="y")
+        page_scroll.pack(side="right", fill="y")
+        for index in range(len(self.document)):
+            self.pages.insert("end", f"Página {index + 1}")
+        self.pages.selection_set(0)
+        self.pages.bind("<<ListboxSelect>>", self._page_selected)
+
+        self.canvas = tk.Canvas(content, bg="#27364a", highlightthickness=0, cursor="crosshair")
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.canvas.bind("<Configure>", self._schedule_render)
+        self.canvas.bind("<ButtonPress-1>", self._drag_begin)
+        self.canvas.bind("<B1-Motion>", self._drag_move)
+        self.canvas.bind("<ButtonRelease-1>", self._drag_end)
+
+        footer = ttk.Frame(self, padding=16)
+        footer.pack(fill="x")
+        ttk.Label(
+            footer,
+            text="A tarja elimina o texto e a imagem da área marcada; não é apenas uma cobertura visual.",
+            foreground="#8b1e1e",
+        ).pack(side="left")
+        ttk.Button(footer, text="Cancelar", command=self.close).pack(side="right")
+        ttk.Button(footer, text="Aplicar tarjas", command=self.accept).pack(side="right", padx=8)
+        self.after_idle(lambda: self.show_centered(1120, 780))
+
+    def _schedule_render(self, _event=None) -> None:
+        if self._render_after is not None:
+            self.after_cancel(self._render_after)
+        self._render_after = self.after(80, self.render_current_page)
+
+    def render_current_page(self) -> None:
+        self._render_after = None
+        page = self.document[self.page_index]
+        available_width = max(200, self.canvas.winfo_width() - 24)
+        available_height = max(200, self.canvas.winfo_height() - 24)
+        self.scale = min(available_width / page.rect.width, available_height / page.rect.height)
+        pixmap = page.get_pixmap(matrix=fitz.Matrix(self.scale, self.scale), alpha=False)
+        image = Image.open(BytesIO(pixmap.tobytes("png")))
+        self.photo = ImageTk.PhotoImage(image)
+        self.offset_x = (self.canvas.winfo_width() - image.width) / 2
+        self.offset_y = (self.canvas.winfo_height() - image.height) / 2
+        self.canvas.delete("all")
+        self.canvas.create_image(self.offset_x, self.offset_y, image=self.photo, anchor="nw")
+        for rectangle in self.redactions.get(self.page_index, []):
+            self.canvas.create_rectangle(
+                self.offset_x + rectangle.x0 * self.scale,
+                self.offset_y + rectangle.y0 * self.scale,
+                self.offset_x + rectangle.x1 * self.scale,
+                self.offset_y + rectangle.y1 * self.scale,
+                fill="black", outline="#dc2626", width=2, stipple="gray50",
+            )
+        count = sum(len(items) for items in self.redactions.values())
+        self.summary.configure(text=f"Página {self.page_index + 1} de {len(self.document)} - {count} tarja(s)")
+
+    def _page_selected(self, _event=None) -> None:
+        selection = self.pages.curselection()
+        if selection:
+            self.page_index = int(selection[0])
+            self.render_current_page()
+
+    def change_page(self, change: int) -> None:
+        target = min(max(0, self.page_index + change), len(self.document) - 1)
+        self.pages.selection_clear(0, "end")
+        self.pages.selection_set(target)
+        self.pages.see(target)
+        self.page_index = target
+        self.render_current_page()
+
+    def _inside_page(self, x: float, y: float) -> bool:
+        page = self.document[self.page_index]
+        return (
+            self.offset_x <= x <= self.offset_x + page.rect.width * self.scale
+            and self.offset_y <= y <= self.offset_y + page.rect.height * self.scale
+        )
+
+    def _drag_begin(self, event: tk.Event) -> None:
+        if not self._inside_page(event.x, event.y):
+            return
+        self.drag_start = (event.x, event.y)
+        self.drag_item = self.canvas.create_rectangle(
+            event.x, event.y, event.x, event.y,
+            fill="black", outline="#dc2626", width=2, stipple="gray50",
+        )
+
+    def _drag_move(self, event: tk.Event) -> None:
+        if self.drag_start is not None and self.drag_item is not None:
+            self.canvas.coords(self.drag_item, *self.drag_start, event.x, event.y)
+
+    def _drag_end(self, event: tk.Event) -> None:
+        if self.drag_start is None:
+            return
+        x0, y0 = self.drag_start
+        page = self.document[self.page_index]
+        x1 = min(max(event.x, self.offset_x), self.offset_x + page.rect.width * self.scale)
+        y1 = min(max(event.y, self.offset_y), self.offset_y + page.rect.height * self.scale)
+        self.drag_start = None
+        self.drag_item = None
+        left, right = sorted(((x0 - self.offset_x) / self.scale, (x1 - self.offset_x) / self.scale))
+        top, bottom = sorted(((y0 - self.offset_y) / self.scale, (y1 - self.offset_y) / self.scale))
+        if right - left >= 2 and bottom - top >= 2:
+            self.redactions.setdefault(self.page_index, []).append(fitz.Rect(left, top, right, bottom))
+        self.render_current_page()
+
+    def undo(self) -> None:
+        values = self.redactions.get(self.page_index, [])
+        if values:
+            values.pop()
+        self.render_current_page()
+
+    def clear_page(self) -> None:
+        self.redactions.pop(self.page_index, None)
+        self.render_current_page()
+
+    def accept(self) -> None:
+        result = [
+            (page_index, rectangle.x0, rectangle.y0, rectangle.x1, rectangle.y1)
+            for page_index, rectangles in self.redactions.items()
+            for rectangle in rectangles
+        ]
+        if not result:
+            messagebox.showerror("PDF & Scanner", "Marque ao menos uma área para ocultar.", parent=self)
+            return
+        if not messagebox.askyesno(
+            "PDF & Scanner",
+            "As informações marcadas serão removidas definitivamente do novo PDF. Continuar?",
+            parent=self,
+        ):
+            return
+        self.result = result
+        self.close(keep_result=True)
+
+    def close(self, keep_result: bool = False) -> None:
+        if not keep_result:
+            self.result = None
+        self.document.close()
         self.destroy()
 
 

@@ -1,4 +1,4 @@
-PDF & SCANNER 2.8.3
+PDF & SCANNER 2.9.0
 =================
 
 COMO ABRIR A VERSÃO PORTÁTIL
@@ -18,6 +18,16 @@ CONFIGURAÇÕES ADMINISTRATIVAS
 - Somente nesse painel é possível cadastrar, editar ou remover IPs de scanners.
 - A pasta padrão, o salvamento automático, o setor e o modelo do nome também
   ficam na configuração administrativa comum do computador.
+- As configurações podem ser exportadas e importadas em arquivo JSON validado.
+- Uma pasta compartilhada interna pode ser definida para contar os computadores
+  que executaram o software. Ela não recebe documentos, senhas nem conteúdo.
+
+PRIVACIDADE E CONTROLE
+- "Ocultar informações" permite desenhar tarjas que removem definitivamente o
+  conteúdo selecionado do novo PDF.
+- "Detectar duplicados" localiza cópias exatas de PDFs em uma pasta e subpastas.
+- "Histórico" mostra as operações locais e permite exportar CSV; não registra
+  nomes nem conteúdo dos documentos.
 
 SCANNERS DE REDE
 - Um administrador pode cadastrar vários equipamentos, cada um com nome e IP.
